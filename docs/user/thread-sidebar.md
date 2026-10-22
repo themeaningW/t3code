@@ -47,6 +47,19 @@ and worktree while you stay in the new thread composer. This requires a Git proj
 
 Pin a thread from its menu to keep it above your active work.
 
+On web and desktop, use **Sort active threads** beside the project filter to choose
+latest completion, unread completions first, creation date in either direction,
+title A–Z or Z–A, or **Manual (drag to reorder)**. Each project and **All projects**
+remember their own choice in this browser or desktop app, including after a restart.
+Pinned, snoozed, and settled sections keep their existing order. Search keeps its
+relevance order.
+
+Choose **Manual** before arranging active threads. Agent completions, read state,
+and title changes do not move manually arranged threads. In this mode, working
+threads stay in the active list even when the Working section setting is on.
+Automatic sort modes preserve your saved manual positions; switching back to
+**Manual** restores them. New threads appear above the arranged threads.
+
 On web and desktop, unpinning, settling, snoozing, and archiving a thread each show
 a notification with **Undo** for five seconds. Undo restores the thread's previous
 state, including its pinned position, and reopens an archived thread you were
@@ -121,8 +134,9 @@ of the active list when it finishes, fails, or needs an approval or answer. The 
 lists the thread you last sent work to first. Pinned threads stay in the pinned section. Each
 device keeps its own choice.
 
-While this is on, the active list is ordered by when each thread last came back to you, so you
-cannot drag or move threads within it. Your saved order returns when you turn it off.
+With the default sort, the active list is ordered by when each thread last came back to you,
+so you cannot drag or move threads within it. A choice in **Sort active threads** takes
+precedence. Choose **Manual** to restore your saved order without changing this setting.
 
 ## Settle finished work
 

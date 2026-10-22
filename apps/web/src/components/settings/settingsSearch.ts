@@ -323,6 +323,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["hide fold running monitoring threads inbox sidebar shelf"],
   },
   {
+    id: "unread-completion-order",
+    title: "Unread first, latest completion",
+    to: "/settings/general",
+    searchTerms: ["sort unread newest finished completed agent threads inbox sidebar all projects"],
+  },
+  {
     id: "auto-settle-inactive-threads",
     title: "Auto-settle inactive threads",
     to: "/settings/general",

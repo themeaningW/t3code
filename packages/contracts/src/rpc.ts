@@ -22,6 +22,7 @@ import {
   ChatGptHandoffState,
 } from "./providerSetup.ts";
 import * as Schema from "effect/Schema";
+import { NotebookTarget, NotebookExecuteInput, NotebookExecutionState, NotebookExecutionFailure } from "./notebook.ts";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
@@ -380,6 +381,10 @@ export const WS_METHODS = {
   projectsSearchContents: "projects.searchContents",
   projectsSearchEntries: "projects.searchEntries",
   projectsWriteFile: "projects.writeFile",
+  notebooksExecute: "notebooks.execute",
+  notebooksStatus: "notebooks.status",
+  notebooksInterrupt: "notebooks.interrupt",
+  notebooksRestart: "notebooks.restart",
   projectsMutate: "projects.mutate",
   projectsEnsureScratch: "projects.ensureScratch",
   projectsCreateNew: "projects.createNew",
@@ -1219,6 +1224,11 @@ const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
   error: Schema.Union([ProjectWriteFileError, EnvironmentAuthorizationError]),
 });
 
+const WsNotebooksExecuteRpc = Rpc.make(WS_METHODS.notebooksExecute, { payload: NotebookExecuteInput, success: NotebookExecutionState, error: Schema.Union([NotebookExecutionFailure, EnvironmentAuthorizationError]) });
+const WsNotebooksStatusRpc = Rpc.make(WS_METHODS.notebooksStatus, { payload: NotebookTarget, success: NotebookExecutionState, error: Schema.Union([NotebookExecutionFailure, EnvironmentAuthorizationError]) });
+const WsNotebooksInterruptRpc = Rpc.make(WS_METHODS.notebooksInterrupt, { payload: NotebookTarget, success: NotebookExecutionState, error: Schema.Union([NotebookExecutionFailure, EnvironmentAuthorizationError]) });
+const WsNotebooksRestartRpc = Rpc.make(WS_METHODS.notebooksRestart, { payload: NotebookTarget, success: NotebookExecutionState, error: Schema.Union([NotebookExecutionFailure, EnvironmentAuthorizationError]) });
+
 const WsProjectsMutateRpc = Rpc.make(WS_METHODS.projectsMutate, {
   payload: ProjectMutation,
   success: Project,
@@ -1962,6 +1972,10 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectsEnsureScratchRpc,
   WsProjectsCreateNewRpc,
   WsProjectsWriteFileRpc,
+  WsNotebooksExecuteRpc,
+  WsNotebooksStatusRpc,
+  WsNotebooksInterruptRpc,
+  WsNotebooksRestartRpc,
   WsProjectsMutateRpc,
   WsShellOpenInEditorRpc,
   WsFilesystemBrowseRpc,

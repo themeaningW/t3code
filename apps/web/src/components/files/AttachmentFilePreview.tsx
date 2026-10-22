@@ -1,4 +1,5 @@
 import { filePreviewDelimiter } from "@t3tools/shared/delimitedPreview";
+import { isNotebookPreviewFile } from "@t3tools/shared/notebookPreview";
 import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
 import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import { readFilePreviewResponse } from "@t3tools/client-runtime/file-preview";
@@ -19,6 +20,7 @@ import { cn } from "~/lib/utils";
 import { AudioPreview } from "./AudioPreview";
 import { BrowserDocumentFrame } from "./BrowserDocumentFrame";
 import { DelimitedTablePreview } from "./DelimitedTablePreview";
+import { NotebookPreview } from "./NotebookPreview";
 import {
   FILE_SURFACE_SUBHEADER_CLASS,
   FileSurfaceAction,
@@ -39,7 +41,11 @@ export function ReadOnlySourcePreview(props: { name: string; text: string }) {
   );
 }
 
-function renderedToggleLabel(mode: "markdown" | "html" | "table", rendered: boolean): string {
+function renderedToggleLabel(
+  mode: "markdown" | "html" | "table" | "notebook",
+  rendered: boolean,
+): string {
+  if (mode === "notebook") return rendered ? "Show notebook source" : "Show notebook";
   if (mode === "markdown") return rendered ? "Show markdown source" : "Show rendered markdown";
   if (mode === "table") return rendered ? "Show source" : "Show table";
   return rendered ? "Show HTML source" : "Show rendered page";
@@ -59,8 +65,17 @@ export function AttachmentFilePreview(props: {
 }) {
   const kind = filePreviewKind(props);
   const delimiter = filePreviewDelimiter(props);
+  const isNotebook = kind === "text" && isNotebookPreviewFile(props.name);
   const renderedMode =
-    kind === "markdown" ? "markdown" : kind === "html" ? "html" : delimiter ? "table" : null;
+    kind === "markdown"
+      ? "markdown"
+      : kind === "html"
+        ? "html"
+        : delimiter
+          ? "table"
+          : isNotebook
+            ? "notebook"
+            : null;
   const attachmentId = props.asset?.attachmentId;
   const { copyToClipboard, isCopied } = useCopyToClipboard({ target: props.name });
   const resource = useMemo(
@@ -168,7 +183,8 @@ export function AttachmentFilePreview(props: {
     needsText &&
     content !== null &&
     !(delimiter && rendered) &&
-    !(kind === "markdown" && rendered);
+    !(kind === "markdown" && rendered) &&
+    !(isNotebook && rendered);
 
   const save = () => {
     setSaving(true);
@@ -218,6 +234,8 @@ export function AttachmentFilePreview(props: {
   ) : needsText && content ? (
     delimiter && rendered ? (
       <DelimitedTablePreview name={props.name} text={content.text} delimiter={delimiter} />
+    ) : isNotebook && rendered ? (
+      <NotebookPreview name={props.name} text={content.text} truncated={content.truncated} />
     ) : kind === "markdown" && rendered ? (
       <ScrollArea className="min-h-0 flex-1">
         <ChatMarkdown text={content.text} cwd={undefined} className="mx-auto max-w-4xl px-6 py-5" />

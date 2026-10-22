@@ -1,5 +1,64 @@
 import { threadRuntimeIsActive, type EnvironmentThreadShell } from "./models.ts";
-import { toSortableTimestamp } from "./threadSort.ts";
+import { sortActiveThreadsByOrderKey, toSortableTimestamp } from "./threadSort.ts";
+import type { SidebarInboxSortOrder } from "@t3tools/contracts/settings";
+
+export const SIDEBAR_INBOX_SORT_OPTIONS = [
+  { value: "default", label: "Default" },
+  { value: "unread_completion", label: "Unread first, latest completion" },
+  { value: "completion_desc", label: "Latest completion" },
+  { value: "created_desc", label: "Newest created" },
+  { value: "created_asc", label: "Oldest created" },
+  { value: "title_asc", label: "Title: A–Z" },
+  { value: "title_desc", label: "Title: Z–A" },
+  { value: "manual", label: "Manual (drag to reorder)" },
+] as const satisfies ReadonlyArray<{ value: SidebarInboxSortOrder; label: string }>;
+
+export function resolveSidebarInboxSortOrder(input: {
+  readonly overrides: Readonly<Record<string, SidebarInboxSortOrder>>;
+  readonly projectScopeKey: string | null;
+  readonly unreadCompletionOrderEnabled: boolean;
+}): SidebarInboxSortOrder {
+  return (
+    input.overrides[JSON.stringify(input.projectScopeKey)] ??
+    (input.projectScopeKey === null && input.unreadCompletionOrderEnabled
+      ? "unread_completion"
+      : "default")
+  );
+}
+
+type SortableInboxThread = InboxThreadInput &
+  Pick<EnvironmentThreadShell, "title" | "activeOrderKey">;
+
+/** Explicit modes take precedence over the default inbox/working-shelf order. */
+export function sortSidebarInboxThreads<T extends SortableInboxThread>(
+  threads: readonly T[],
+  mode: Exclude<SidebarInboxSortOrder, "default">,
+  isUnread: (thread: T) => boolean,
+  observedReturnAt?: (thread: T) => number | undefined,
+): T[] {
+  if (mode === "manual") return sortActiveThreadsByOrderKey(threads);
+  if (mode === "unread_completion" || mode === "completion_desc") {
+    return sortUnreadInboxThreadsByReturn(
+      threads,
+      mode === "unread_completion" ? isUnread : () => false,
+      observedReturnAt,
+    );
+  }
+  const titles = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+  return [...threads].sort((left, right) => {
+    const order =
+      mode === "title_asc" || mode === "title_desc"
+        ? titles.compare(left.title, right.title) * (mode === "title_desc" ? -1 : 1)
+        : ((toSortableTimestamp(left.createdAt) ?? 0) -
+            (toSortableTimestamp(right.createdAt) ?? 0)) *
+          (mode === "created_desc" ? -1 : 1);
+    return (
+      order ||
+      left.id.localeCompare(right.id) ||
+      left.environmentId.localeCompare(right.environmentId)
+    );
+  });
+}
 
 type WorkingThreadInput = Pick<
   EnvironmentThreadShell,
@@ -56,6 +115,27 @@ type WorkingSortInput = Pick<
   EnvironmentThreadShell,
   "id" | "environmentId" | "createdAt" | "latestRun" | "latestUserAuthoredMessageAt"
 >;
+
+export function sortUnreadInboxThreadsByReturn<T extends InboxThreadInput>(
+  threads: readonly T[],
+  isUnread: (thread: T) => boolean,
+  observedReturnAt?: (thread: T) => number | undefined,
+): T[] {
+  const timestamps = new Map(
+    threads.map((thread) => [
+      thread,
+      toSortableTimestamp(thread.latestRun?.completedAt ?? undefined) ??
+        observedReturnAt?.(thread) ??
+        toSortableTimestamp(thread.latestRun?.requestedAt ?? undefined) ??
+        toSortableTimestamp(thread.createdAt) ??
+        0,
+    ]),
+  );
+  const ordered = sortNewestFirst(threads, timestamps);
+  const unread = ordered.filter(isUnread);
+  const read = ordered.filter((thread) => !isUnread(thread));
+  return [...unread, ...read];
+}
 
 export function sortWorkingThreadsBySend<T extends WorkingSortInput>(threads: readonly T[]): T[] {
   const timestamps = new Map(

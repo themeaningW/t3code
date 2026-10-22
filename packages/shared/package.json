@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./notebookPreview": {
+      "types": "./src/notebookPreview.ts",
+      "import": "./src/notebookPreview.ts"
+    },
     "./githubMarkdownLinks": {
       "types": "./src/githubMarkdownLinks.ts",
       "import": "./src/githubMarkdownLinks.ts"

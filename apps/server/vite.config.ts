@@ -1,3 +1,5 @@
+// @effect-diagnostics nodeBuiltinImport:off - Build bootstrap embeds the Python worker before any Effect runtime exists.
+import * as NodeFSP from "node:fs/promises";
 import "vite-plus/test/config";
 import { defineConfig, mergeConfig } from "vite-plus";
 
@@ -15,7 +17,10 @@ import {
 export { shouldBundleCliDependency };
 
 const repoEnv = loadRepoEnv();
-const cliBuildChannel = /^[^-+]+-(?:nightly|preview)\./.test(packageJson.version)
+const localBuildVersion = process.env.T3CODE_LOCAL_BUILD_VERSION?.trim();
+const cliBuildChannel = /^[^-+]+-(?:nightly|preview)\./.test(
+  localBuildVersion ?? packageJson.version,
+)
   ? "nightly"
   : "latest";
 
@@ -61,6 +66,21 @@ export default mergeConfig(
       },
     },
     pack: {
+      plugins: [
+        {
+          name: "notebook-worker-source",
+          load: async (id) =>
+            localBuildVersion && /[\\/]apps[\\/]server[\\/]package\.json$/.test(id)
+              ? {
+                  code: JSON.stringify({ ...packageJson, version: localBuildVersion }),
+                }
+              : id.endsWith("notebook_worker.py?raw")
+                ? {
+                    code: `export default ${JSON.stringify(await NodeFSP.readFile(id.slice(0, -4), "utf8"))}`,
+                  }
+                : null,
+        },
+      ],
       // The executable embeds one entry; the history worker becomes a hidden
       // subcommand there instead of a sibling script.
       entry: packExecutable ? ["src/bin.ts"] : ["src/bin.ts", "src/claude-history-worker.ts"],

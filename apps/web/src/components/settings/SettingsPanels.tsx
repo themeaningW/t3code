@@ -2351,6 +2351,20 @@ export function GeneralSettingsPanel() {
           }
         />
 
+        <SettingsRow
+          {...searchableSetting("unread-completion-order")}
+          description="Default for All projects: unread completions first, ordered by latest return. Use Sort active threads in the sidebar to choose a different order for this view or each project."
+          control={
+            <Switch
+              checked={settings.sidebarUnreadCompletionOrderEnabled}
+              onCheckedChange={(checked) =>
+                updateSettings({ sidebarUnreadCompletionOrderEnabled: Boolean(checked) })
+              }
+              aria-label="Unread first, latest completion"
+            />
+          }
+        />
+
         {supportsAutoSettlement ? (
           <>
             <SettingsRow

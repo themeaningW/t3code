@@ -28,6 +28,11 @@ import {
   type Modifier,
 } from "@dnd-kit/core";
 import { SortableContext, useSortable } from "@dnd-kit/sortable";
+import {
+  resolveSidebarInboxSortOrder,
+  SIDEBAR_INBOX_SORT_OPTIONS,
+  sortSidebarInboxThreads,
+} from "@t3tools/client-runtime/state/thread-inbox";
 import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -63,11 +68,12 @@ import {
   type ThreadId,
 } from "@t3tools/contracts";
 
-import type { TimestampFormat } from "@t3tools/contracts/settings";
+import { SidebarInboxSortOrder, type TimestampFormat } from "@t3tools/contracts/settings";
 import {
   AlarmClockIcon,
   AlarmClockOffIcon,
   ArrowRightLeftIcon,
+  ArrowDownUpIcon,
   CheckIcon,
   CircleAlertIcon,
   CircleCheckIcon,
@@ -284,7 +290,16 @@ import {
 import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { SidebarHeaderIconButton, SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
-import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuShortcut, MenuTrigger } from "./ui/menu";
+import {
+  Menu,
+  MenuItem,
+  MenuPopup,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuSeparator,
+  MenuShortcut,
+  MenuTrigger,
+} from "./ui/menu";
 import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { MiddleTruncate } from "./ui/middle-truncate";
 import {
@@ -2241,6 +2256,9 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
   );
 });
 
+const InboxSortOverrides = Schema.Record(Schema.String, SidebarInboxSortOrder);
+const EMPTY_INBOX_SORT_OVERRIDES: Readonly<Record<string, SidebarInboxSortOrder>> = {};
+
 export default function Sidebar() {
   const projects = useProjects();
   const threads = useThreadShells();
@@ -2251,6 +2269,15 @@ export default function Sidebar() {
   const confirmThreadArchive = useClientSettings((s) => s.confirmThreadArchive);
   const timestampFormat = useClientSettings((s) => s.timestampFormat);
   const workingShelfEnabled = useClientSettings((s) => s.sidebarWorkingShelfEnabled);
+  const unreadCompletionOrderEnabled = useClientSettings(
+    (s) => s.sidebarUnreadCompletionOrderEnabled,
+  );
+  const [inboxSortOverrides, setInboxSortOverrides] = useLocalStorage(
+    "t3code.sidebarInboxSortOverrides.v1",
+    EMPTY_INBOX_SORT_OVERRIDES,
+    InboxSortOverrides,
+  );
+  const visitedAtByThreadKey = useUiStateStore((state) => state.threadLastVisitedAtById);
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
   const {
     settleThread,
@@ -2470,6 +2497,45 @@ export default function Sidebar() {
         : (projectGroups.find((project) => project.projectKey === projectScopeKey) ?? null),
     [projectGroups, projectScopeKey],
   );
+  const inboxSortOrder = resolveSidebarInboxSortOrder({
+    overrides: inboxSortOverrides,
+    projectScopeKey,
+    unreadCompletionOrderEnabled,
+  });
+  const activeTimeOrdered =
+    inboxSortOrder !== "manual" && (inboxSortOrder !== "default" || workingShelfEnabled);
+  const changeInboxSortOrder = useCallback(
+    (mode: SidebarInboxSortOrder) => {
+      setInboxSortOverrides((current) => ({
+        ...current,
+        [JSON.stringify(projectScopeKey)]: mode,
+      }));
+    },
+    [projectScopeKey, setInboxSortOverrides],
+  );
+  const sortActiveInboxThreads = useCallback(
+    (active: readonly EnvironmentThreadShell[]) =>
+      inboxSortOrder !== "default"
+        ? sortSidebarInboxThreads(
+            active,
+            inboxSortOrder,
+            (thread) => {
+              const key = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
+              return hasUnseenCompletion({
+                ...thread,
+                lastVisitedAt: resolveThreadLastVisitedAt(
+                  thread.lastVisitedAt,
+                  visitedAtByThreadKey[key],
+                ),
+              });
+            },
+            workingShelfEnabled ? inboxReturns.returnedAt : undefined,
+          )
+        : workingShelfEnabled
+          ? sortInboxThreadsByReturn(active, inboxReturns.returnedAt)
+          : sortThreadsForSidebar(active),
+    [inboxSortOrder, visitedAtByThreadKey, workingShelfEnabled],
+  );
   const scopedProjectKeys = useMemo(
     () =>
       scopedProjectGroup === null
@@ -2592,7 +2658,9 @@ export default function Sidebar() {
     const active: EnvironmentThreadShell[] = [];
     const working: EnvironmentThreadShell[] = [];
     const inbox = (thread: EnvironmentThreadShell) =>
-      workingShelfEnabled && isSidebarThreadWorking(thread) ? working : active;
+      workingShelfEnabled && inboxSortOrder !== "manual" && isSidebarThreadWorking(thread)
+        ? working
+        : active;
     const snoozed: EnvironmentThreadShell[] = [];
     const settled: EnvironmentThreadShell[] = [];
     const draggable = new Set<string>();
@@ -2643,9 +2711,7 @@ export default function Sidebar() {
     // sort, or mixed-version fleets would render different pinned orders on
     // web and mobile from the same data.
     const sortedPinned = sortPinnedThreadsForSidebar(pinned);
-    const sortedActive = workingShelfEnabled
-      ? sortInboxThreadsByReturn(active, inboxReturns.returnedAt)
-      : sortThreadsForSidebar(active);
+    const sortedActive = sortActiveInboxThreads(active);
     return {
       pinnedThreads:
         optimisticDrop?.section !== "pinned" || optimisticDrop.order === null
@@ -2682,6 +2748,8 @@ export default function Sidebar() {
     snoozeWakeTick,
     threads,
     workingShelfEnabled,
+    inboxSortOrder,
+    sortActiveInboxThreads,
   ]);
 
   const threadSearchInputRef = useRef<HTMLInputElement>(null);
@@ -3613,17 +3681,14 @@ export default function Sidebar() {
   }, [dragState, settledThreads, threadByKey]);
   const draggedActiveOrder = useMemo(() => {
     const thread = dragState === null ? undefined : threadByKey.get(dragState.activeKey);
-    if (!workingShelfEnabled || dragState === null || thread === undefined) return undefined;
+    if (!activeTimeOrdered || dragState === null || thread === undefined) return undefined;
     const key = (candidate: EnvironmentThreadShell) =>
       scopedThreadKey(scopeThreadRef(candidate.environmentId, candidate.id));
-    return sortInboxThreadsByReturn(
-      [
-        ...activeThreads.filter((candidate) => key(candidate) !== dragState.activeKey),
-        applySidebarThreadDrop(thread, "active", dragState.occurredAt),
-      ],
-      inboxReturns.returnedAt,
-    ).map(key);
-  }, [activeThreads, dragState, threadByKey, workingShelfEnabled]);
+    return sortActiveInboxThreads([
+      ...activeThreads.filter((candidate) => key(candidate) !== dragState.activeKey),
+      applySidebarThreadDrop(thread, "active", dragState.occurredAt),
+    ]).map(key);
+  }, [activeThreads, dragState, threadByKey, activeTimeOrdered, sortActiveInboxThreads]);
   const sidebarSortingStrategy = useMemo(
     () =>
       createSidebarSortingStrategy({
@@ -3693,7 +3758,7 @@ export default function Sidebar() {
             activeOrder: activeKeys,
             activeKeysById,
             activeReorderableKeys: activeReorderableThreadKeys,
-            activeTimeOrdered: workingShelfEnabled,
+            activeTimeOrdered,
           }).kind !== "none"
         );
       },
@@ -3715,7 +3780,7 @@ export default function Sidebar() {
     pinnedKeys,
     sidebarListItems,
     threadByKey,
-    workingShelfEnabled,
+    activeTimeOrdered,
   ]);
   const handleThreadDragEnd = useCallback(
     (event: DragEndEvent) => {
@@ -3743,7 +3808,7 @@ export default function Sidebar() {
         activeOrder: activeKeys,
         activeKeysById,
         activeReorderableKeys: activeReorderableThreadKeys,
-        activeTimeOrdered: workingShelfEnabled,
+        activeTimeOrdered,
       });
       if (plan.kind === "none") return;
       if (plan.kind === "settle" && settlingThreadKeysRef.current.has(activeKey)) return;
@@ -3883,7 +3948,7 @@ export default function Sidebar() {
       unpinThread,
       unsettleThread,
       unsnoozeThread,
-      workingShelfEnabled,
+      activeTimeOrdered,
     ],
   );
   const snoozingThreadKeysRef = useRef(new Set<string>());
@@ -4623,6 +4688,43 @@ export default function Sidebar() {
             <SidebarThreadHeader
               searchFieldRef={headerSearchRef}
               hasProjects={projectGroups.length > 0}
+              threadSort={
+                <Menu>
+                  <MenuTrigger
+                    render={
+                      <SidebarHeaderIconButton
+                        label={`Sort active threads: ${SIDEBAR_INBOX_SORT_OPTIONS.find((option) => option.value === inboxSortOrder)?.label}`}
+                      />
+                    }
+                  >
+                    <ArrowDownUpIcon />
+                  </MenuTrigger>
+                  <MenuPopup align="end">
+                    <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                      {scopedProjectGroup?.displayName ?? "All projects"} · Active threads
+                    </div>
+                    <MenuRadioGroup
+                      value={inboxSortOrder}
+                      onValueChange={(value) => {
+                        if (SIDEBAR_INBOX_SORT_OPTIONS.some((option) => option.value === value)) {
+                          changeInboxSortOrder(value as SidebarInboxSortOrder);
+                        }
+                      }}
+                    >
+                      {SIDEBAR_INBOX_SORT_OPTIONS.map((option) => (
+                        <MenuRadioItem key={option.value} value={option.value}>
+                          {option.label}
+                        </MenuRadioItem>
+                      ))}
+                    </MenuRadioGroup>
+                    <MenuSeparator />
+                    <div className="max-w-64 px-2 py-1.5 text-xs text-muted-foreground">
+                      Saved separately for this view. Pinned, snoozed and settled sections keep
+                      their own order.
+                    </div>
+                  </MenuPopup>
+                </Menu>
+              }
               projectScope={
                 <Combobox
                   items={projectScopeItems}

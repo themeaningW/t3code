@@ -7,6 +7,7 @@ import {
   type ScopedThreadRef,
 } from "@t3tools/contracts";
 import { filePreviewDelimiter } from "@t3tools/shared/delimitedPreview";
+import { isNotebookPreviewFile } from "@t3tools/shared/notebookPreview";
 import { AuthFilesystemWriteScope } from "@t3tools/contracts";
 import {
   isWorkspaceAudioPreviewPath,
@@ -75,6 +76,8 @@ import { AttachmentFilePreview } from "./AttachmentFilePreview";
 import { AudioPreview } from "./AudioPreview";
 import { BrowserDocumentFrame, isPdfPreviewFile } from "./BrowserDocumentFrame";
 import { DelimitedTablePreview } from "./DelimitedTablePreview";
+import { NotebookPreview } from "./NotebookPreview";
+import { ExecutableNotebook } from "./ExecutableNotebook";
 import FileBrowserPanel from "./FileBrowserPanel";
 import { FileBreadcrumbs } from "./FileBreadcrumbs";
 import { breadcrumbPathOf, retainedBreadcrumbTrail, trailChildOf } from "./filePath";
@@ -143,6 +146,7 @@ const FILE_EXPLORER_STORAGE_KEY = "t3code.fileExplorerOpen";
 const RENDER_MARKDOWN_STORAGE_KEY = "t3code.renderMarkdown";
 const RENDER_BROWSER_FILE_STORAGE_KEY = "t3code.renderBrowserFile";
 const RENDER_TABLE_STORAGE_KEY = "t3code.renderTable";
+const RENDER_NOTEBOOK_STORAGE_KEY = "t3code.renderNotebook";
 type FilePostRender = <LAnnotation>(
   fileContainer: HTMLElement,
   instance: FileInstance<LAnnotation, undefined>,
@@ -999,7 +1003,11 @@ function RenderedMarkdownSurface({
   );
 }
 
-function renderedToggleLabel(mode: "markdown" | "html" | "table", rendered: boolean): string {
+function renderedToggleLabel(
+  mode: "markdown" | "html" | "table" | "notebook",
+  rendered: boolean,
+): string {
+  if (mode === "notebook") return rendered ? "Show notebook source" : "Show notebook";
   if (mode === "markdown") return rendered ? "Show markdown source" : "Show rendered markdown";
   if (mode === "table") return rendered ? "Show source" : "Show table";
   return rendered ? "Show HTML source" : "Show rendered page";
@@ -1109,6 +1117,11 @@ export default function FilePreviewPanel({
     true,
     Schema.Boolean,
   );
+  const [renderNotebookPreferred, setRenderNotebookPreferred] = useLocalStorage(
+    RENDER_NOTEBOOK_STORAGE_KEY,
+    true,
+    Schema.Boolean,
+  );
   // Paired with the path on purpose: each file surface counts its reveals from
   // one, so a bare id would let a dismissed reveal on one file swallow the first
   // reveal on the next.
@@ -1117,6 +1130,7 @@ export default function FilePreviewPanel({
   );
   const breadcrumbRef = useRef<HTMLDivElement>(null);
   const isMarkdown = previewPath ? isMarkdownPreviewFile(previewPath) : false;
+  const isNotebook = previewPath ? isNotebookPreviewFile(previewPath) : false;
   const tableDelimiter =
     previewPath && attachment === undefined ? filePreviewDelimiter({ name: previewPath }) : null;
   const revealHandled =
@@ -1125,13 +1139,16 @@ export default function FilePreviewPanel({
   const renderMarkdown = isMarkdown && renderMarkdownPreferred && revealHandled;
   const renderBrowserFile = isPdf || (isHtml && renderBrowserFilePreferred && revealHandled);
   const renderTable = tableDelimiter !== null && renderTablePreferred && revealHandled;
+  const renderNotebook = isNotebook && renderNotebookPreferred && revealHandled;
   const renderedMode = isMarkdown
     ? ("markdown" as const)
     : tableDelimiter
       ? ("table" as const)
       : isHtml
         ? ("html" as const)
-        : null;
+        : isNotebook
+          ? ("notebook" as const)
+          : null;
   const canToggleRendered =
     previewPath !== null && attachment === undefined && renderedMode !== null;
   const updateClientSettings = useUpdateClientSettings();
@@ -1140,13 +1157,22 @@ export default function FilePreviewPanel({
     file.data !== null &&
     !(isMarkdown && renderMarkdown) &&
     !(tableDelimiter && renderTable) &&
+    !renderNotebook &&
     !renderBrowserFile;
-  const rendered = isMarkdown ? renderMarkdown : tableDelimiter ? renderTable : renderBrowserFile;
+  const rendered = isMarkdown
+    ? renderMarkdown
+    : tableDelimiter
+      ? renderTable
+      : isNotebook
+        ? renderNotebook
+        : renderBrowserFile;
   const setRenderedPreferred = isMarkdown
     ? setRenderMarkdownPreferred
     : tableDelimiter
       ? setRenderTablePreferred
-      : setRenderBrowserFilePreferred;
+      : isNotebook
+        ? setRenderNotebookPreferred
+        : setRenderBrowserFilePreferred;
   const canOpenInBrowser =
     canOperatePreview &&
     previewPath !== null &&
@@ -1457,6 +1483,28 @@ export default function FilePreviewPanel({
                 name={relativePath}
                 text={file.data.contents}
                 delimiter={tableDelimiter}
+              />
+            ) : renderNotebook && !isHostFile && canWriteFiles && !file.data.truncated ? (
+              <ExecutableNotebook
+                environmentId={environmentId}
+                onSaved={file.refresh}
+                key={relativePath}
+                name={relativePath}
+                text={file.data.contents}
+                truncated={file.data.truncated}
+                cwd={cwd}
+                threadRef={threadRef}
+                workspaceMutationId={workspaceMutationId}
+              />
+            ) : renderNotebook ? (
+              <NotebookPreview
+                key={relativePath}
+                name={relativePath}
+                text={file.data.contents}
+                truncated={file.data.truncated}
+                cwd={cwd}
+                threadRef={threadRef}
+                workspaceMutationId={workspaceMutationId}
               />
             ) : file.data.truncated || isHostFile || !canWriteFiles ? (
               <SourceFilePreview

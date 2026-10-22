@@ -308,6 +308,32 @@ share** and **Open in file viewer**. Pictures, videos and PDFs keep their native
 other document formats such as Word or Pages open in the device's own viewer when it has one.
 If nothing on the device can show a format, save or share it to open it elsewhere.
 
+## Jupyter notebooks
+
+On web and desktop, open an `.ipynb` file from Files, a file link, or an attachment to read
+its cells and saved outputs. The preview supports Jupyter format 4, Markdown, code, text
+outputs, and PNG/JPEG plots. Interactive widgets are not displayed.
+
+For a writable workspace notebook, choose a Python kernel and use **Run** beside a code
+cell or **Run all**. Cells share variables in one kernel per notebook. **Stop** interrupts
+execution; if Python does not respond, T3 shuts down that kernel and reports that variables
+were cleared. **Restart** clears variables without deleting saved outputs. Run all stops at
+the first error. Kernels survive closing the panel, but not restarting T3.
+
+Outputs and execution counts are saved automatically. If the file changes during execution,
+T3 keeps those edits and reports that results were not saved. Agents can use
+`notebook_execute`, `notebook_status`, `notebook_interrupt`, and `notebook_restart` to access
+the same kernel. Execution requires terminal access; agent execution requires full access.
+
+The host needs a Python environment at `<T3 home>/tools/notebook-runtime` (or
+`~/.t3/tools/notebook-runtime`) with `jupyter-client` and `ipykernel`; add `matplotlib` for plots.
+Install project kernels separately to use their existing dependencies. Execution happens on
+the environment's host, including when the panel is opened remotely.
+
+Switch to source to inspect the JSON or edit a writable workspace file. Attachments and
+files outside the workspace remain read-only. Partially loaded notebooks cannot be rendered;
+open the full file in an external editor instead.
+
 ## Images and videos in messages
 
 Select an image or video attachment or link to preview it. Playback support depends

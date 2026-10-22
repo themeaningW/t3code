@@ -43,6 +43,31 @@ in a new thread's model picker to add or remove them. A regular click returns to
 single model. Choose a base branch and send. Each selection starts a separate thread
 and worktree while you stay in the new thread composer. This requires a Git project.
 
+## Organize projects into collections
+
+On web and desktop, enable **Settings → General → Project collections** to group
+projects without moving their folders. Create a collection, then move projects into
+it using their menus or drag and drop. Select a collection to see its threads, or
+select a project to keep using that project's own sort order. Collections also
+remember their own thread sort choice. Deleting a collection keeps its projects.
+
+Collections, project positions, and the selected collection are saved on this
+device. Projects from disconnected environments retain their membership and appear
+again when you reconnect. Turning the feature off keeps the saved layout.
+
+## Keep threads in tabs
+
+On web and desktop, enable **Settings → General → Thread tabs**. Opening a thread
+adds it to the tab strip, including threads from different environments. Use the
+tab manager to find an open thread or reopen the last closed tab. Pin tabs and
+arrange them by dragging or through their menus. In the desktop app, `Ctrl+Tab`
+and `Ctrl+Shift+Tab` switch tabs; when a tab has keyboard focus, arrow keys switch
+tabs and `Delete` closes the selected tab.
+
+Closing a tab leaves the thread, composer draft, and running agent intact. Open
+tabs, pins, and order survive reloads on this device. Pinning a tab is independent
+of pinning a thread in the sidebar. Disabling tabs keeps the saved layout.
+
 ## Pin and reorder threads
 
 Pin a thread from its menu to keep it above your active work.

@@ -329,6 +329,18 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["sort unread newest finished completed agent threads inbox sidebar all projects"],
   },
   {
+    id: "project-collections",
+    title: "Project collections",
+    to: "/settings/general",
+    searchTerms: ["groups folders organize projects sidebar"],
+  },
+  {
+    id: "thread-tabs",
+    title: "Thread tabs",
+    to: "/settings/general",
+    searchTerms: ["browser tabs environments pin reopen navigation workspace"],
+  },
+  {
     id: "auto-settle-inactive-threads",
     title: "Auto-settle inactive threads",
     to: "/settings/general",

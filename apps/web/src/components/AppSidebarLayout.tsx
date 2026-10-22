@@ -34,6 +34,7 @@ import {
 import LegacyThreadSidebar from "./LegacySidebar";
 import { useThreadVisitedMigration } from "../hooks/useThreadVisitedMigration";
 import ThreadSidebar from "./Sidebar";
+import { ThreadTabBar } from "./ThreadTabBar";
 import { SettingsSidebarNav } from "./settings/SettingsSidebarNav";
 import { SidebarBrandWidthProbe, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { MainAppLocationTracker } from "./sidebar/mainAppLocation";
@@ -338,7 +339,15 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
           )}
           <SidebarRail onDoubleClick={resetSidebarWidth} />
         </Sidebar>
-        {children}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <ThreadTabBar />
+          <div
+            id="thread-tab-active-view"
+            className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
+          >
+            {children}
+          </div>
+        </div>
         <SidebarControl />
         <NavigationHistoryShortcuts />
         <MainAppLocationTracker />

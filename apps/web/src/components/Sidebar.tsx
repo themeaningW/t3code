@@ -150,6 +150,9 @@ import {
 import { useAcknowledgeThreadWoke, useThreadActions } from "../hooks/useThreadActions";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useSidebarProjectGroups } from "../hooks/useSidebarProjectGroups";
+import { ProjectCollections } from "./sidebar/ProjectCollections";
+import { useWorkspaceNavigationStore } from "../workspaceNavigationStore";
+import { collectionScopeKey } from "../workspaceNavigation.logic";
 import { useTerminalFocus } from "../hooks/useTerminalFocus";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import { registerSettleAndAdvance } from "../settleAndAdvance";
@@ -2428,7 +2431,28 @@ export default function Sidebar() {
   const [snoozeWakeTick, bumpSnoozeWakeTick] = useState(0);
 
   const persistedProjectScopeKey = useUiStateStore((store) => store.sidebarProjectScopeKey);
-  const setProjectScopeKey = useUiStateStore((store) => store.setSidebarProjectScopeKey);
+  const setRawProjectScopeKey = useUiStateStore((store) => store.setSidebarProjectScopeKey);
+  const collectionsEnabled = useWorkspaceNavigationStore((s) => s.collectionsEnabled);
+  const collections = useWorkspaceNavigationStore((s) => s.collections);
+  const selectedCollectionId = useWorkspaceNavigationStore((s) => s.selectedCollectionId);
+  const selectCollection = useWorkspaceNavigationStore((s) => s.selectCollection);
+  const selectedCollection = collectionsEnabled
+    ? (collections.find((collection) => collection.id === selectedCollectionId) ?? null)
+    : null;
+  const setProjectScopeKey = useCallback(
+    (key: string | null) => {
+      selectCollection(null);
+      setRawProjectScopeKey(key);
+    },
+    [selectCollection, setRawProjectScopeKey],
+  );
+  const selectProjectCollection = useCallback(
+    (id: string | null) => {
+      setRawProjectScopeKey(null);
+      selectCollection(id);
+    },
+    [selectCollection, setRawProjectScopeKey],
+  );
   const projectScopeKey = useMemo(
     () =>
       resolveSidebarProjectScopeKey({
@@ -2441,12 +2465,18 @@ export default function Sidebar() {
   const projectScopeItems = useMemo(
     () => [
       { value: "all", label: "All projects" },
+      ...(collectionsEnabled
+        ? collections.map((collection) => ({
+            value: collectionScopeKey(collection.id),
+            label: `Collection: ${collection.name}`,
+          }))
+        : []),
       ...projectGroups.map((project) => ({
         value: project.projectKey,
         label: project.displayName,
       })),
     ],
-    [projectGroups],
+    [projectGroups, collectionsEnabled, collections],
   );
   const showProjectEnvironments = useMemo(
     () => projectGroupsSpanEnvironments(projectGroups),
@@ -2471,9 +2501,14 @@ export default function Sidebar() {
   );
   const selectedProjectScopeItem = useMemo(
     () =>
-      projectScopeItems.find((item) => item.value === (projectScopeKey ?? "all")) ??
-      projectScopeItems[0]!,
-    [projectScopeItems, projectScopeKey],
+      projectScopeItems.find(
+        (item) =>
+          item.value ===
+          (selectedCollection
+            ? collectionScopeKey(selectedCollection.id)
+            : (projectScopeKey ?? "all")),
+      ) ?? projectScopeItems[0]!,
+    [projectScopeItems, projectScopeKey, selectedCollection],
   );
   const [projectScopeMenuState, dispatchProjectScopeMenu] = useReducer(
     reduceSidebarProjectScopeMenuState,
@@ -2499,7 +2534,9 @@ export default function Sidebar() {
   );
   const inboxSortOrder = resolveSidebarInboxSortOrder({
     overrides: inboxSortOverrides,
-    projectScopeKey,
+    projectScopeKey: selectedCollection
+      ? collectionScopeKey(selectedCollection.id)
+      : projectScopeKey,
     unreadCompletionOrderEnabled,
   });
   const activeTimeOrdered =
@@ -2508,10 +2545,12 @@ export default function Sidebar() {
     (mode: SidebarInboxSortOrder) => {
       setInboxSortOverrides((current) => ({
         ...current,
-        [JSON.stringify(projectScopeKey)]: mode,
+        [JSON.stringify(
+          selectedCollection ? collectionScopeKey(selectedCollection.id) : projectScopeKey,
+        )]: mode,
       }));
     },
-    [projectScopeKey, setInboxSortOverrides],
+    [projectScopeKey, selectedCollection, setInboxSortOverrides],
   );
   const sortActiveInboxThreads = useCallback(
     (active: readonly EnvironmentThreadShell[]) =>
@@ -2539,13 +2578,21 @@ export default function Sidebar() {
   const scopedProjectKeys = useMemo(
     () =>
       scopedProjectGroup === null
-        ? null
+        ? selectedCollection === null
+          ? null
+          : new Set(
+              projectGroups
+                .filter((project) => selectedCollection.projectKeys.includes(project.projectKey))
+                .flatMap((project) =>
+                  project.memberProjectRefs.map((ref) => `${ref.environmentId}:${ref.projectId}`),
+                ),
+            )
         : new Set(
             scopedProjectGroup.memberProjectRefs.map(
               (projectRef) => `${projectRef.environmentId}:${projectRef.projectId}`,
             ),
           ),
-    [scopedProjectGroup],
+    [scopedProjectGroup, selectedCollection, projectGroups],
   );
   const allProjectSnapshotsReady = useAllEnvironmentProjectSnapshotsReady();
   const allProjectConfigsReady = useAtomValue(environmentProjects.projectConfigsReadyAtom);
@@ -2589,7 +2636,7 @@ export default function Sidebar() {
   });
   useEffect(() => {
     clearSelection();
-  }, [clearSelection, projectScopeKey]);
+  }, [clearSelection, projectScopeKey, selectedCollectionId]);
 
   const openProjectSettings = useStableCallback(
     (projectGroup: SidebarProjectSnapshot, projectRef?: ScopedProjectRef) => {
@@ -2812,7 +2859,9 @@ export default function Sidebar() {
   }, [snoozedThreads]);
 
   const [settledVisibleCount, setSettledVisibleCount] = useState(SETTLED_TAIL_INITIAL_COUNT);
-  const settledResetKey = projectScopeKey ?? "all";
+  const settledResetKey = selectedCollection
+    ? collectionScopeKey(selectedCollection.id)
+    : (projectScopeKey ?? "all");
   const lastSettledResetKeyRef = useRef(settledResetKey);
   if (lastSettledResetKeyRef.current !== settledResetKey) {
     lastSettledResetKeyRef.current = settledResetKey;
@@ -4701,7 +4750,10 @@ export default function Sidebar() {
                   </MenuTrigger>
                   <MenuPopup align="end">
                     <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                      {scopedProjectGroup?.displayName ?? "All projects"} · Active threads
+                      {selectedCollection?.name ??
+                        scopedProjectGroup?.displayName ??
+                        "All projects"}{" "}
+                      · Active threads
                     </div>
                     <MenuRadioGroup
                       value={inboxSortOrder}
@@ -4747,7 +4799,13 @@ export default function Sidebar() {
                       return;
                     }
                     if (!item) return;
-                    setProjectScopeKey(item.value === "all" ? null : item.value);
+                    const collection = collectionsEnabled
+                      ? collections.find(
+                          (collection) => collectionScopeKey(collection.id) === item.value,
+                        )
+                      : null;
+                    if (collection) selectProjectCollection(collection.id);
+                    else setProjectScopeKey(item.value === "all" ? null : item.value);
                   }}
                 >
                   <ComboboxTrigger
@@ -4867,6 +4925,14 @@ export default function Sidebar() {
               activeSearchResultIndex={activeSearchResultIndex}
               onClearSearch={clearThreadSearch}
             />
+            {collectionsEnabled ? (
+              <ProjectCollections
+                projects={projectGroups}
+                selectedProjectKey={projectScopeKey}
+                onProjectSelect={setProjectScopeKey}
+                onCollectionSelect={selectProjectCollection}
+              />
+            ) : null}
           </SidebarGroup>
         }
       >

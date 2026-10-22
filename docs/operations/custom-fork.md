@@ -7,13 +7,15 @@ before changing the installed application.
 ## Recovery point
 
 `safety/baseline-2026-10-22` identifies the source before project collections and
-thread tabs. Its GitHub release contains the matching server recovery bundle.
+thread tabs. The tag is a source checkpoint; its GitHub release has no prebuilt
+binary attached. Keep the separately saved server recovery bundle for restoring
+the installed application without rebuilding.
 The baseline server SHA256 is
 `c4629b87ae0d8d63f2bdac807922011a8e8b51a0deda1a4ea059d4b298d58305`.
 
 To restore the installed features on Windows:
 
-1. Download and extract the recovery bundle from that release.
+1. Extract the saved recovery bundle created before installing the change.
 2. Quit T3 Code completely.
 3. Run `pwsh -NoProfile -File ./Restore-ForkServer.ps1` in the extracted folder.
 4. Start T3 Code again.

@@ -170,6 +170,7 @@ import {
 import { searchableSetting } from "./settingsSearch";
 import { ProjectFavicon } from "../ProjectFavicon";
 import { PanelAnimationsPreview } from "./PanelAnimationsPreview";
+import { WorkspaceNavigationSettings } from "./WorkspaceNavigationSettings";
 
 const ENVIRONMENT_IDENTIFICATION_LABELS: Record<EnvironmentIdentificationMode, string> = {
   artwork: "Artwork",
@@ -2364,6 +2365,8 @@ export function GeneralSettingsPanel() {
             />
           }
         />
+
+        <WorkspaceNavigationSettings />
 
         {supportsAutoSettlement ? (
           <>

@@ -188,7 +188,9 @@ function serializeNode(node: Node): string {
     return serializeDetails(element);
   }
   const markdownCopy = element.getAttribute("data-markdown-copy");
-  if (markdownCopy !== null) return markdownCopy;
+  if (markdownCopy !== null) {
+    return element.classList.contains("katex-display") ? `\n\n${markdownCopy}\n\n` : markdownCopy;
+  }
   if (isSkippedElement(element)) return "";
 
   const headingLevel = /^H([1-6])$/.exec(element.tagName)?.[1];
@@ -368,6 +370,12 @@ export function chatMarkdownClipboardPayload(
     const ancestor = range.commonAncestorContainer;
     const ancestorElement =
       ancestor.nodeType === Node.ELEMENT_NODE ? (ancestor as Element) : ancestor.parentElement;
+    // A glyph selection excludes the formula's wrapper and its TeX annotation.
+    // Copy the whole formula so the result can be reused by an agent or editor.
+    const formula = ancestorElement?.closest(
+      ".katex[data-markdown-copy], .katex-display[data-markdown-copy]",
+    );
+    if (formula) container.replaceChildren(formula.cloneNode(true));
     if (ancestorElement?.closest("pre")) {
       const text = range.toString();
       if (text) {

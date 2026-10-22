@@ -31,6 +31,7 @@ import remarkRehype from "remark-rehype";
 import {
   shouldPreserveAssistantLineBreaks,
   CHAT_MARKDOWN_REHYPE_PLUGINS,
+  CHAT_MARKDOWN_MATH_REHYPE_PLUGINS,
   CHAT_MARKDOWN_REMARK_PLUGINS,
   CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS,
 } from "./markdownPipeline.ts";
@@ -88,7 +89,8 @@ const assistantBreaksProcessor = unified()
 const userProcessor = unified()
   .use(remarkParse)
   .use(CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS)
-  .use(remarkRehype, { allowDangerousHtml: true });
+  .use(remarkRehype, { allowDangerousHtml: true })
+  .use(CHAT_MARKDOWN_MATH_REHYPE_PLUGINS);
 
 interface TextTree {
   readonly type: string;
@@ -98,6 +100,7 @@ interface TextTree {
     readonly href?: unknown;
     readonly src?: unknown;
     readonly dataInlineCode?: unknown;
+    readonly dataThreadFindIgnore?: unknown;
   };
   readonly children?: ReadonlyArray<TextTree>;
 }
@@ -130,6 +133,10 @@ function markdownThreadFindText(
     text = "";
   };
   const visit = (node: TextTree, inPre = false, inlineSkills = false) => {
+    if (node.properties?.dataThreadFindIgnore) {
+      flush();
+      return;
+    }
     const href = node.properties?.href ?? node.properties?.src;
     if (userMessage && typeof href === "string" && parseComposerContextHref(href)) {
       flush();

@@ -2,7 +2,7 @@
 
 import { EnvironmentId, type AuthEnvironmentScope } from "@t3tools/contracts";
 import { createRoot } from "react-dom/client";
-import { useThreadFindHighlights } from "./chat/threadFindHighlights";
+import { collectThreadFindRanges, useThreadFindHighlights } from "./chat/threadFindHighlights";
 import { searchableMessageSegments } from "@t3tools/shared/threadFindText";
 import { countThreadSearchOccurrences } from "@t3tools/shared/threadSearch";
 
@@ -16,6 +16,10 @@ import { getSyntaxHighlighterPromise } from "../lib/syntaxHighlighting";
 import { GitHubIcon } from "./Icons";
 import { Button } from "./ui/button";
 import { setMarkdownTaskChecked } from "./files/filePreviewMode";
+import {
+  chatMarkdownClipboardPayload,
+  serializeRenderedMarkdownFragment,
+} from "../markdown-clipboard";
 
 vi.mock("../hooks/useFileMetadata", () => ({ useFileMetadata: () => null }));
 vi.mock("@effect/atom-react", () => ({ useAtomValue: () => null }));
@@ -94,6 +98,160 @@ function codeButton(renderer: ReactTestRenderer, label: string) {
   if (!button) throw new Error(`Missing code button: ${label}`);
   return button.props as ComponentProps<typeof Button>;
 }
+
+describe("ChatMarkdown math", () => {
+  function renderMath(text: string, parseRawHtml = true) {
+    const container = document.createElement("div");
+    container.innerHTML = renderToStaticMarkup(
+      <ChatMarkdown cwd="/tmp/project" text={text} parseRawHtml={parseRawHtml} />,
+    );
+    return container;
+  }
+
+  it.each(["$DF=\\frac{1}{(1+r)^T}$", "\\(DF=\\frac{1}{(1+r)^T}\\)"])(
+    "renders inline fractions and exponents: %s",
+    (text) => {
+      const container = renderMath(`Discount factor ${text}.`);
+      expect(container.querySelector("math mfrac")).not.toBeNull();
+      expect(container.querySelector("math msup")).not.toBeNull();
+      expect(container.querySelector("annotation")?.textContent).toBe("DF=\\frac{1}{(1+r)^T}");
+      expect(container.querySelector(".katex-display")).toBeNull();
+      expect(container.querySelector(".katex-html")?.textContent).not.toContain("\\frac");
+      expect(container.querySelector("p")?.textContent).toContain("Discount factor");
+    },
+  );
+
+  it.each([
+    "\\[DF=\\frac{1}{(1+r)^T}\\]",
+    "\\[\nDF=\\frac{1}{(1+r)^T}\n\\]",
+    "$$DF=\\frac{1}{(1+r)^T}$$",
+    "$$\nDF=\\frac{1}{(1+r)^T}\n$$",
+    "```math\nDF=\\frac{1}{(1+r)^T}\n```",
+  ])("renders display math: %s", (text) => {
+    const container = renderMath(text);
+    expect(container.querySelector(".katex-display math mfrac")).not.toBeNull();
+    expect(container.querySelector("pre")).toBeNull();
+  });
+
+  it("preserves TeX line breaks, nested commands, and Polish units", () => {
+    const formula =
+      "\\begin{aligned}DF&=\\frac{1}{1.05}\\\\PV&=100\\cdot DF\\approx95.24\\text{ zł}\\end{aligned}";
+    const container = renderMath(`\\[\n${formula}\n\\]`);
+    expect(container.querySelector("math mtable")).not.toBeNull();
+    expect(container.querySelector(".katex-html")?.textContent).toContain("zł");
+    expect(container.querySelector("annotation")?.textContent?.trim()).toBe(formula);
+    expect(container.querySelector(".katex-error")).toBeNull();
+  });
+
+  it.each([
+    "Prices: $100 and $200. Discount: (5%).",
+    "Use $skill, $HOME, and $other.",
+    "Escaped \\$x\\$ and \\\\(literal\\\\).",
+    "`$x^2$` and `\\(x\\)` and `\\[x\\]`.",
+    "```python\nprice = '$100'\nformula = r'\\(x\\)'\n```",
+    "```latex\n\\[x^2\\]\n```",
+    "[File](https://example.com/$x$/\\(literal\\))",
+    "Incomplete \\(\\frac{1}{",
+    "Incomplete \\[\\frac{1}{",
+  ])("keeps ordinary prose, code, URLs, and unfinished math readable: %s", (text) => {
+    const container = renderMath(text);
+    expect(container.querySelector(".katex")).toBeNull();
+    expect(container.querySelector(".katex-error")).toBeNull();
+    expect(container.textContent?.length).toBeGreaterThan(0);
+  });
+
+  it("renders formulas beside currency without consuming the sentence", () => {
+    const container = renderMath("$100 and $200. Formula $x^2$, then $300.");
+    expect(container.querySelectorAll(".katex")).toHaveLength(1);
+    expect(container.querySelector("p")?.textContent).toContain("$100 and $200. Formula");
+    expect(container.querySelector("p")?.textContent).toContain(", then $300.");
+  });
+
+  it.each([true, false])("renders user and assistant math (parseRawHtml=%s)", (parseRawHtml) => {
+    const container = renderMath("Formula \\(x^2\\).", parseRawHtml);
+    expect(container.querySelector("math msup")).not.toBeNull();
+  });
+
+  it("shows invalid TeX without losing later text or valid formulas", () => {
+    const container = renderMath("Broken \\(\\frac{1}\\). Next \\(x^2\\). End.");
+    expect(container.querySelector(".katex-error")?.textContent).toBe("\\frac{1}");
+    expect(container.querySelector(".katex-error")?.hasAttribute("title")).toBe(false);
+    expect(container.querySelector("math msup")).not.toBeNull();
+    expect(container.textContent).toContain("End.");
+  });
+
+  it("sanitizes HTML and rejects executable or external-content TeX commands", () => {
+    const container = renderMath(
+      '<script>alert(1)</script>\n\n<img src="x" onerror="alert(1)">\n\n' +
+        "\\(\\href{javascript:alert(1)}{click}\\) " +
+        "\\(\\includegraphics{https://example.com/tracker.png}\\) " +
+        "\\(\\htmlClass{injected}{x}\\)",
+    );
+    expect(
+      container.querySelector("script, [onerror], a[href^='javascript:'], .injected"),
+    ).toBeNull();
+    expect(container.querySelector("img[src*='tracker']")).toBeNull();
+    expect(container.querySelectorAll(".katex")).toHaveLength(3);
+  });
+
+  it.each([
+    "\\[DF=\\frac{1}{(1+r)^T}\\]",
+    "\\[\nDF=\\frac{1}{(1+r)^T}\n\\]",
+    "$$\nDF=\\frac{1}{(1+r)^T}\n$$",
+  ])("copies %s as reusable LaTeX, once", (formula) => {
+    const container = renderMath(`Before \\(x^2\\).\n\n${formula}\n\nAfter.`);
+    const copied = serializeRenderedMarkdownFragment(container);
+    expect(copied).toBe("Before \\(x^2\\).\n\n\\[\nDF=\\frac{1}{(1+r)^T}\n\\]\n\nAfter.");
+    expect(renderMath(copied).querySelector(".katex-display math mfrac")).not.toBeNull();
+  });
+
+  it.each([
+    { formula: "\\(DF=\\frac{1}{(1+r)^T}\\)", expected: "\\(DF=\\frac{1}{(1+r)^T}\\)" },
+    { formula: "\\[DF=\\frac{1}{(1+r)^T}\\]", expected: "\\[\nDF=\\frac{1}{(1+r)^T}\n\\]" },
+  ])("copies full LaTeX when selecting glyphs inside $formula", ({ formula, expected }) => {
+    const container = renderMath(`Before ${formula}. After.`);
+    document.body.append(container);
+    const selection = window.getSelection()!;
+    try {
+      const range = document.createRange();
+      range.selectNodeContents(container.querySelector(".katex-html .mfrac")!);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      expect(chatMarkdownClipboardPayload(selection)?.text).toBe(expected);
+    } finally {
+      selection.removeAllRanges();
+      container.remove();
+    }
+  });
+
+  it.each([true, false])(
+    "keeps find counts and visible highlights consistent (parseRawHtml=%s)",
+    (parseRawHtml) => {
+      const text = "Before \\(DF=e^{-rT}\\). After DF.\n\n\\[DF=\\frac{1}{(1+r)^T}\\]";
+      const container = document.createElement("div");
+      container.innerHTML = `<div data-timeline-row-id="math"><div data-thread-find-text>${renderMath(text, parseRawHtml).innerHTML}</div></div>`;
+      const segments = searchableMessageSegments({
+        role: parseRawHtml ? "assistant" : "user",
+        text,
+        streaming: false,
+      });
+      for (const query of ["DF", "Before", "After", "frac"]) {
+        const ranges = collectThreadFindRanges(container, query);
+        expect(ranges).toHaveLength(
+          (segments ?? []).reduce(
+            (count, segment) => count + countThreadSearchOccurrences(segment, query),
+            0,
+          ),
+        );
+        expect(
+          ranges.every(
+            ({ range }) => !range.startContainer.parentElement?.closest(".katex-mathml"),
+          ),
+        ).toBe(true);
+      }
+    },
+  );
+});
 
 describe("ChatMarkdown bare anchor placeholders", () => {
   it.each(["<A>", "<a>", "<a >", "<a/>", "<A/>", "<a />"])(

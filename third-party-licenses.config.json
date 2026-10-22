@@ -151,6 +151,24 @@
   ],
   "packageOverrides": [
     {
+      "name": "rehype-katex",
+      "version": "7.0.1",
+      "sourceUrl": "https://github.com/remarkjs/remark-math/blob/rehype-katex%407.0.1/license",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": ["Copyright (c) 2017 Junyoung Choi <fluke8259@gmail.com>"]
+      }
+    },
+    {
+      "name": "remark-math",
+      "version": "6.0.0",
+      "sourceUrl": "https://github.com/remarkjs/remark-math/blob/6.0.0/license",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": ["Copyright (c) 2017 Junyoung Choi <fluke8259@gmail.com>"]
+      }
+    },
+    {
       "name": "@bufbuild/protobuf",
       "version": "1.10.0",
       "generatedNotices": [

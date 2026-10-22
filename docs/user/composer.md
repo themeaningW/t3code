@@ -14,6 +14,11 @@ to keep a large paste editable in the composer instead.
 
 ## Formatting
 
+On web and desktop, messages and Markdown previews render LaTeX formulas. Use
+`$x^2$` or `\(x^2\)` inside a sentence, and `$$` on separate lines or
+`\[x^2\]` for a displayed equation. Ordinary code blocks and inline code keep the
+original text. Selecting part of a formula copies the whole formula as LaTeX.
+
 The composer writes Markdown and shows it styled as you type. Markers such as
 `**` stay in the text and show beside the styled words when your cursor is on
 them. Lines starting with `- `, `1. `, `- [ ] `, `> `, `# ` or `---` become lists,

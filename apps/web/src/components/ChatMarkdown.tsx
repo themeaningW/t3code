@@ -18,6 +18,7 @@ import {
   CHAT_MARKDOWN_REMARK_PLUGINS,
   CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS,
   CHAT_MARKDOWN_REHYPE_PLUGINS,
+  CHAT_MARKDOWN_MATH_REHYPE_PLUGINS,
 } from "@t3tools/shared/markdownPipeline";
 import { useAtomValue } from "@effect/atom-react";
 import {
@@ -1805,9 +1806,10 @@ const CHAT_MARKDOWN_RENDER_REHYPE_PLUGINS = [
   rehypeHeadingIds,
 ] satisfies NonNullable<ReactMarkdownOptions["rehypePlugins"]>;
 
-const CHAT_MARKDOWN_LITERAL_HTML_REHYPE_PLUGINS = [rehypeHeadingIds] satisfies NonNullable<
-  ReactMarkdownOptions["rehypePlugins"]
->;
+const CHAT_MARKDOWN_LITERAL_HTML_REHYPE_PLUGINS = [
+  ...CHAT_MARKDOWN_MATH_REHYPE_PLUGINS,
+  rehypeHeadingIds,
+] satisfies NonNullable<ReactMarkdownOptions["rehypePlugins"]>;
 
 function MarkdownExternalLinkContent({
   host,

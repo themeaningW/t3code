@@ -4732,8 +4732,13 @@ export default function Sidebar() {
       <SidebarChromeHeader isElectron={isElectron} />
       <SidebarContent
         className="min-h-full"
+        fixedHeaderClassName={
+          collectionsEnabled
+            ? "flex min-h-0 max-h-[max(8rem,calc(100%_-_12rem))] flex-col"
+            : undefined
+        }
         fixedHeader={
-          <SidebarGroup className="z-[1]">
+          <SidebarGroup className="z-[1] min-h-0">
             <SidebarThreadHeader
               searchFieldRef={headerSearchRef}
               hasProjects={projectGroups.length > 0}

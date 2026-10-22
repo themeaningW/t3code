@@ -1,4 +1,4 @@
-import { useState, type DragEvent } from "react";
+import { useRef, useState, type DragEvent, type PointerEvent } from "react";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import type { SidebarProjectSnapshot } from "~/sidebarProjectGrouping";
 import { useWorkspaceNavigationStore } from "~/workspaceNavigationStore";
+import { normalizeCollectionsPaneHeight } from "~/workspaceNavigation.logic";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -32,6 +33,35 @@ export function ProjectCollections(props: {
   onCollectionSelect: (id: string | null) => void;
 }) {
   const state = useWorkspaceNavigationStore();
+  const listRef = useRef<HTMLDivElement>(null);
+  const resizeRef = useRef<{
+    pointerId: number;
+    startY: number;
+    startHeight: number;
+    height: string;
+    maxHeight: string;
+  } | null>(null);
+  const resizeList = (height: number) => {
+    const list = listRef.current;
+    if (!list) return;
+    list.style.height = `${normalizeCollectionsPaneHeight(height)}px`;
+    list.style.maxHeight = "none";
+  };
+  const finishResize = (event: PointerEvent<HTMLDivElement>, commit: boolean) => {
+    const resize = resizeRef.current;
+    const list = listRef.current;
+    if (!resize || resize.pointerId !== event.pointerId || !list) return;
+    resizeRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (commit && Math.abs(list.getBoundingClientRect().height - resize.startHeight) > 1) {
+      state.setCollectionsPaneHeight(list.getBoundingClientRect().height);
+    } else {
+      list.style.height = resize.height;
+      list.style.maxHeight = resize.maxHeight;
+    }
+  };
   const [editing, setEditing] = useState<{ id: string | null; name: string } | null>(null);
   const assigned = new Set(state.collections.flatMap((g) => g.projectKeys));
   const byKey = new Map(props.projects.map((p) => [p.projectKey, p]));
@@ -144,8 +174,8 @@ export function ProjectCollections(props: {
   };
   if (!state.collectionsEnabled) return null;
   return (
-    <section aria-label="Project collections" className="border-b border-sidebar-border px-2 pb-2">
-      <div className="flex items-center justify-between gap-2 py-1">
+    <section aria-label="Project collections" className="flex min-h-0 flex-col px-2">
+      <div className="flex shrink-0 items-center justify-between gap-2 py-1">
         <span className="text-2xs font-medium text-sidebar-muted-foreground">Collections</span>
         <Button
           size="icon-xs"
@@ -156,7 +186,14 @@ export function ProjectCollections(props: {
           <PlusIcon className="size-3.5" />
         </Button>
       </div>
-      <div className="max-h-64 overflow-y-auto overscroll-contain">
+      <div
+        ref={listRef}
+        className="min-h-0 overflow-y-auto overscroll-contain"
+        style={{
+          height: state.collectionsPaneHeight ?? undefined,
+          maxHeight: state.collectionsPaneHeight === null ? 256 : undefined,
+        }}
+      >
         <button
           type="button"
           className="w-full rounded px-2 py-1.5 text-left text-xs hover:bg-sidebar-row-hover"
@@ -259,12 +296,77 @@ export function ProjectCollections(props: {
           );
         })}
         <div onDragOver={canDrop} onDrop={(event) => drop(event, null)}>
-          <p className="px-2 pb-1 pt-3 text-2xs text-sidebar-muted-foreground">Ungrouped</p>
-          {props.projects
-            .filter((p) => !assigned.has(p.projectKey))
-            .map((p) => projectRow(p, null))}
+          <button
+            type="button"
+            className="mt-2 flex w-full items-center gap-1 rounded px-1 py-1.5 text-left text-2xs text-sidebar-muted-foreground hover:bg-sidebar-row-hover"
+            aria-label={`${state.ungroupedCollapsed ? "Expand" : "Collapse"} Ungrouped`}
+            aria-expanded={!state.ungroupedCollapsed}
+            onClick={state.toggleUngrouped}
+          >
+            {state.ungroupedCollapsed ? (
+              <ChevronRightIcon className="size-3.5" />
+            ) : (
+              <ChevronDownIcon className="size-3.5" />
+            )}
+            Ungrouped
+          </button>
+          {!state.ungroupedCollapsed
+            ? props.projects
+                .filter((p) => !assigned.has(p.projectKey))
+                .map((p) => projectRow(p, null))
+            : null}
         </div>
       </div>
+      <div
+        role="separator"
+        tabIndex={0}
+        aria-label="Resize projects and threads"
+        aria-orientation="horizontal"
+        aria-valuemin={64}
+        aria-valuemax={1200}
+        aria-valuenow={state.collectionsPaneHeight ?? 256}
+        aria-description="Drag to resize; double-click or press Home to reset"
+        className="my-1 h-2 shrink-0 touch-none cursor-row-resize rounded border-b border-sidebar-border hover:bg-sidebar-row-hover focus-visible:outline-2 focus-visible:outline-ring"
+        onPointerDown={(event) => {
+          if (event.button !== 0 || !listRef.current) return;
+          event.preventDefault();
+          event.currentTarget.setPointerCapture(event.pointerId);
+          resizeRef.current = {
+            pointerId: event.pointerId,
+            startY: event.clientY,
+            startHeight: listRef.current.getBoundingClientRect().height,
+            height: listRef.current.style.height,
+            maxHeight: listRef.current.style.maxHeight,
+          };
+        }}
+        onPointerMove={(event) => {
+          const resize = resizeRef.current;
+          if (resize?.pointerId !== event.pointerId) return;
+          resizeList(resize.startHeight + event.clientY - resize.startY);
+        }}
+        onPointerUp={(event) => finishResize(event, true)}
+        onPointerCancel={(event) => finishResize(event, false)}
+        onLostPointerCapture={(event) => finishResize(event, true)}
+        onDoubleClick={() => state.setCollectionsPaneHeight(null)}
+        onKeyDown={(event) => {
+          if (event.key === "Home") {
+            event.preventDefault();
+            state.setCollectionsPaneHeight(null);
+          } else if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+            event.preventDefault();
+            resizeList(
+              (listRef.current?.getBoundingClientRect().height ?? 256) +
+                (event.key === "ArrowDown" ? 24 : -24),
+            );
+            const list = listRef.current;
+            if (list) {
+              const height = list.getBoundingClientRect().height;
+              list.style.height = `${height}px`;
+              state.setCollectionsPaneHeight(height);
+            }
+          }
+        }}
+      />
       <Dialog
         open={editing !== null}
         onOpenChange={(open) => {

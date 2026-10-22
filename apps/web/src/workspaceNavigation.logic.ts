@@ -20,6 +20,8 @@ export interface WorkspaceTab {
 
 export interface WorkspaceNavigationData {
   collectionsEnabled: boolean;
+  ungroupedCollapsed: boolean;
+  collectionsPaneHeight: number | null;
   tabsEnabled: boolean;
   collections: ProjectCollection[];
   selectedCollectionId: string | null;
@@ -30,6 +32,8 @@ export interface WorkspaceNavigationData {
 
 export const EMPTY_WORKSPACE_NAVIGATION: WorkspaceNavigationData = {
   collectionsEnabled: false,
+  ungroupedCollapsed: false,
+  collectionsPaneHeight: null,
   tabsEnabled: false,
   collections: [],
   selectedCollectionId: null,
@@ -45,6 +49,12 @@ export function workspaceTabKey(target: ThreadRouteTarget): string {
 }
 
 export const collectionScopeKey = (id: string) => `\0collection:${id}`;
+
+export function normalizeCollectionsPaneHeight(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.min(1200, Math.max(64, Math.round(value)))
+    : null;
+}
 
 const object = (value: unknown): Record<string, unknown> | null =>
   value !== null && typeof value === "object" && !Array.isArray(value)
@@ -104,6 +114,8 @@ export function parseWorkspaceNavigation(value: unknown): WorkspaceNavigationDat
   const tabs = pinFirst(uniqueTabs(raw.tabs));
   return {
     collectionsEnabled: raw.collectionsEnabled === true,
+    ungroupedCollapsed: raw.ungroupedCollapsed === true,
+    collectionsPaneHeight: normalizeCollectionsPaneHeight(raw.collectionsPaneHeight),
     tabsEnabled: raw.tabsEnabled === true,
     collections,
     selectedCollectionId: groupIds.has(text(raw.selectedCollectionId))

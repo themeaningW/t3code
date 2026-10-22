@@ -15,6 +15,26 @@ const target = (id: string, environment = "local") => ({
 });
 
 describe("project collections", () => {
+  it("restores the Ungrouped collapse state and split height without changing project membership", () => {
+    const storage = createMemoryStorage();
+    const store = createWorkspaceNavigationStore(storage);
+    const group = store.getState().createCollection("Study")!;
+    store.getState().assignProject("one", group);
+    store.getState().toggleUngrouped();
+    store.getState().setCollectionsPaneHeight(340);
+    const restored = createWorkspaceNavigationStore(storage);
+    expect(restored.getState()).toMatchObject({
+      ungroupedCollapsed: true,
+      collectionsPaneHeight: 340,
+    });
+    expect(restored.getState().collections[0]?.projectKeys).toEqual(["one"]);
+    restored.getState().toggleUngrouped();
+    restored.getState().setCollectionsPaneHeight(null);
+    expect(createWorkspaceNavigationStore(storage).getState()).toMatchObject({
+      ungroupedCollapsed: false,
+      collectionsPaneHeight: null,
+    });
+  });
   it("moves a project between groups and preserves assignments while projects are offline", () => {
     const store = createWorkspaceNavigationStore(createMemoryStorage()),
       s = store.getState;
@@ -152,6 +172,22 @@ describe("thread tabs", () => {
 });
 
 describe("navigation storage validation", () => {
+  it("keeps older layouts usable and constrains corrupt split heights", () => {
+    expect(parseWorkspaceNavigation({ collectionsEnabled: true })).toMatchObject({
+      collectionsEnabled: true,
+      ungroupedCollapsed: false,
+      collectionsPaneHeight: null,
+    });
+    for (const value of ["340", Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(
+        parseWorkspaceNavigation({ collectionsPaneHeight: value }).collectionsPaneHeight,
+      ).toBeNull();
+    }
+    expect(parseWorkspaceNavigation({ collectionsPaneHeight: -50 }).collectionsPaneHeight).toBe(64);
+    expect(parseWorkspaceNavigation({ collectionsPaneHeight: 10000 }).collectionsPaneHeight).toBe(
+      1200,
+    );
+  });
   it("drops corrupt entries and duplicates while retaining valid offline references", () => {
     const valid = { target: target("one"), key: "untrusted-key", title: "Valid", pinned: false };
     const parsed = parseWorkspaceNavigation({

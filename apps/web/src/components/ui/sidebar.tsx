@@ -606,13 +606,17 @@ function SidebarFooter({ className, ...props }: React.ComponentProps<"div">) {
 function SidebarContent({
   className,
   fixedHeader,
+  fixedHeaderClassName,
   ...props
 }: React.ComponentProps<"div"> & {
   fixedHeader?: React.ReactNode;
+  fixedHeaderClassName?: string | undefined;
 }) {
   return (
     <>
-      {fixedHeader ? <div className="w-full shrink-0">{fixedHeader}</div> : null}
+      {fixedHeader ? (
+        <div className={cn("w-full shrink-0", fixedHeaderClassName)}>{fixedHeader}</div>
+      ) : null}
       <ScrollArea
         hideScrollbars
         scrollFade

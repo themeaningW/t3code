@@ -10,6 +10,7 @@ import {
   EMPTY_WORKSPACE_NAVIGATION,
   moveItem,
   parseWorkspaceNavigation,
+  normalizeCollectionsPaneHeight,
   pinFirst,
   workspaceTabKey,
   type WorkspaceNavigationData,
@@ -20,6 +21,8 @@ export const WORKSPACE_NAVIGATION_STORAGE_KEY = "t3code:workspace-navigation:v1"
 
 interface WorkspaceNavigationStore extends WorkspaceNavigationData {
   setCollectionsEnabled: (enabled: boolean) => void;
+  toggleUngrouped: () => void;
+  setCollectionsPaneHeight: (height: number | null) => void;
   setTabsEnabled: (enabled: boolean) => void;
   createCollection: (name: string) => string | null;
   renameCollection: (id: string, name: string) => void;
@@ -44,6 +47,9 @@ export function createWorkspaceNavigationStore(storage?: StateStorage) {
       (set, get) => ({
         ...EMPTY_WORKSPACE_NAVIGATION,
         setCollectionsEnabled: (enabled) => set({ collectionsEnabled: enabled }),
+        toggleUngrouped: () => set((state) => ({ ungroupedCollapsed: !state.ungroupedCollapsed })),
+        setCollectionsPaneHeight: (height) =>
+          set({ collectionsPaneHeight: normalizeCollectionsPaneHeight(height) }),
         setTabsEnabled: (enabled) => set({ tabsEnabled: enabled }),
         createCollection: (name) => {
           if (!name.trim()) return null;
@@ -201,6 +207,8 @@ export function createWorkspaceNavigationStore(storage?: StateStorage) {
         ),
         partialize: (state) => ({
           collectionsEnabled: state.collectionsEnabled,
+          ungroupedCollapsed: state.ungroupedCollapsed,
+          collectionsPaneHeight: state.collectionsPaneHeight,
           tabsEnabled: state.tabsEnabled,
           collections: state.collections,
           selectedCollectionId: state.selectedCollectionId,

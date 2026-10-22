@@ -65,13 +65,13 @@ function SortableThreadTab(props: {
   onKeyDown: (event: ReactKeyboardEvent) => void;
 }) {
   const { tab, presentation } = props;
-  const { setNodeRef, listeners, transform, transition, isDragging } = useSortable({ id: tab.key });
+  const { setNodeRef, setActivatorNodeRef, listeners, transform, transition, isDragging } =
+    useSortable({ id: tab.key });
   const state = useWorkspaceNavigationStore();
   const index = state.tabs.findIndex((t) => t.key === tab.key);
   return (
     <div
       ref={setNodeRef}
-      {...listeners}
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={cn(
         "group/thread-tab relative flex w-48 shrink-0 items-center rounded-md border border-transparent pr-1 [-webkit-app-region:no-drag]",
@@ -86,6 +86,8 @@ function SortableThreadTab(props: {
       }}
     >
       <button
+        ref={setActivatorNodeRef}
+        {...listeners}
         type="button"
         role="tab"
         aria-selected={props.active}
@@ -376,7 +378,10 @@ function EnabledThreadTabBar() {
   };
   return (
     <>
-      <WorkspacePageHeader electron={isElectron} className="gap-1 border-b px-2">
+      <WorkspacePageHeader
+        reserveNativeControls={isElectron}
+        className="relative z-20 gap-1 border-b px-2 [-webkit-app-region:no-drag]"
+      >
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}

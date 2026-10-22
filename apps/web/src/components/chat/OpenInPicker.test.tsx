@@ -176,6 +176,59 @@ function keyboardEvent() {
   return { preventDefault: vi.fn() } as unknown as KeyboardEvent;
 }
 
+async function renderNotebookAction(availableEditors: readonly EditorId[] = ["cursor", "vscode"]) {
+  await act(async () => {
+    renderer = create(
+      <OpenInPicker
+        environmentId={selected}
+        keybindings={DEFAULT_RESOLVED_KEYBINDINGS}
+        availableEditors={availableEditors}
+        openInCwd="/work/project/Notebook A.ipynb"
+        fixedEditor="vscode"
+        enableShortcut={false}
+      />,
+    );
+  });
+  return renderer!.root.findByProps({ "aria-label": "Open in VS Code" });
+}
+
+describe("notebook editor handoff", () => {
+  it("opens the exact saved notebook in VS Code without replacing the preferred editor", async () => {
+    state.allowed.add(selected);
+    window.localStorage.setItem("t3code:last-editor", '"cursor"');
+    const button = await renderNotebookAction();
+    await act(async () => button.props.onClick());
+    expect(state.run).toHaveBeenCalledExactlyOnceWith({
+      environmentId: selected,
+      input: { cwd: "/work/project/Notebook A.ipynb", editor: "vscode" },
+    });
+    expect(state.setPreferred).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem("t3code:last-editor")).toBe('"cursor"');
+    expect(state.keydown).toBeNull();
+  });
+
+  it("uses the SSH client link for a remote notebook instead of launching on the server", async () => {
+    state.remote = { mode: "remote-links", host: { kind: "ssh-alias", host: "test-host" } };
+    state.clientEditors = ["vscode", "cursor"];
+    const button = await renderNotebookAction([]);
+    await act(async () => button.props.onClick());
+    expect(state.openUrl).toHaveBeenCalledExactlyOnceWith(
+      "vscode://vscode-remote/ssh-remote+test-host/work/project/Notebook%20A.ipynb",
+    );
+    expect(state.run).not.toHaveBeenCalled();
+    expect(state.setPreferred).not.toHaveBeenCalled();
+  });
+
+  it("does not fall back to another editor when VS Code is unavailable", async () => {
+    state.allowed.add(selected);
+    const button = await renderNotebookAction(["cursor"]);
+    expect(button.props.disabled).toBe(true);
+    await act(async () => button.props.onClick());
+    expect(state.run).not.toHaveBeenCalled();
+    expect(state.openUrl).not.toHaveBeenCalled();
+  });
+});
+
 it.each(["local-exec", "remote-links"] as const)(
   "selects the preferred editor without launching a %s workspace",
   async (mode) => {

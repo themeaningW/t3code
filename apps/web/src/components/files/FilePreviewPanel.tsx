@@ -38,7 +38,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { mediaFileReference } from "@t3tools/client-runtime/media-reference";
-import { FolderTree, Globe2, WrapTextIcon } from "lucide-react";
+import { FolderTree, Globe2, RefreshCwIcon, WrapTextIcon } from "lucide-react";
 import { Code2, Eye, Table2 } from "lucide";
 import * as Schema from "effect/Schema";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -77,7 +77,6 @@ import { AudioPreview } from "./AudioPreview";
 import { BrowserDocumentFrame, isPdfPreviewFile } from "./BrowserDocumentFrame";
 import { DelimitedTablePreview } from "./DelimitedTablePreview";
 import { NotebookPreview } from "./NotebookPreview";
-import { ExecutableNotebook } from "./ExecutableNotebook";
 import FileBrowserPanel from "./FileBrowserPanel";
 import { FileBreadcrumbs } from "./FileBreadcrumbs";
 import { breadcrumbPathOf, retainedBreadcrumbTrail, trailChildOf } from "./filePath";
@@ -1196,6 +1195,7 @@ export default function FilePreviewPanel({
         ? resolvePathLinkTarget(relativePath, cwd)
         : null;
   const onFilePostRender = useFileLineReveal(relativePath, revealLine, revealRequestId);
+  const refreshFile = file.refresh;
   useWorkspaceMutationRefresh({
     enabled:
       attachment === undefined &&
@@ -1209,6 +1209,20 @@ export default function FilePreviewPanel({
     refresh: file.refresh,
     resourceKey: `file:${environmentId}:${cwd}:${relativePath ?? ""}`,
   });
+
+  useEffect(() => {
+    if (!isNotebook || attachment !== undefined || selectedFilePending) return;
+    // VS Code saves outside T3's mutation stream; refresh when the user returns.
+    const refresh = () => {
+      if (document.visibilityState === "visible") refreshFile();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [isNotebook, attachment, selectedFilePending, refreshFile]);
 
   useEffect(() => {
     const crumbs = breadcrumbRef.current?.querySelectorAll<HTMLElement>("[data-file-crumb]");
@@ -1313,8 +1327,20 @@ export default function FilePreviewPanel({
               keybindings={keybindings}
               availableEditors={availableEditors}
               openInCwd={absolutePath}
+              fixedEditor={isNotebook ? "vscode" : undefined}
+              disabled={isNotebook && selectedFilePending}
+              enableShortcut={!isNotebook}
               compact
             />
+          ) : null}
+          {isNotebook && attachment === undefined ? (
+            <FileSurfaceAction
+              label="Reload saved notebook"
+              disabled={selectedFilePending}
+              onPress={file.refresh}
+            >
+              <RefreshCwIcon className="size-3.5" />
+            </FileSurfaceAction>
           ) : null}
           {canToggleRendered && renderedMode ? (
             <FileSurfaceAction
@@ -1483,18 +1509,6 @@ export default function FilePreviewPanel({
                 name={relativePath}
                 text={file.data.contents}
                 delimiter={tableDelimiter}
-              />
-            ) : renderNotebook && !isHostFile && canWriteFiles && !file.data.truncated ? (
-              <ExecutableNotebook
-                environmentId={environmentId}
-                onSaved={file.refresh}
-                key={relativePath}
-                name={relativePath}
-                text={file.data.contents}
-                truncated={file.data.truncated}
-                cwd={cwd}
-                threadRef={threadRef}
-                workspaceMutationId={workspaceMutationId}
               />
             ) : renderNotebook ? (
               <NotebookPreview

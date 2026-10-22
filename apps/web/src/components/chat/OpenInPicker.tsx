@@ -20,6 +20,7 @@ import { useEnvironment } from "../../state/environments";
 import { ChevronDownIcon, FolderClosedIcon, SquareArrowOutUpRightIcon } from "lucide-react";
 
 import { Group, GroupSeparator } from "../ui/group";
+import { Button } from "../ui/button";
 import {
   Menu,
   MenuItem,
@@ -212,6 +213,8 @@ export const OpenInPicker = memo(function OpenInPicker({
   compact = false,
   enableShortcut = true,
   displayMode = "toolbar",
+  fixedEditor,
+  disabled = false,
 }: {
   environmentId: EnvironmentId;
   keybindings: ResolvedKeybindingsConfig;
@@ -221,6 +224,8 @@ export const OpenInPicker = memo(function OpenInPicker({
   compact?: boolean;
   enableShortcut?: boolean;
   displayMode?: "toolbar" | "panel";
+  fixedEditor?: EditorId | undefined;
+  disabled?: boolean;
 }) {
   const isPanel = displayMode === "panel";
   const ActionGroup = isPanel ? "div" : Group;
@@ -229,7 +234,7 @@ export const OpenInPicker = memo(function OpenInPicker({
   const remote = useRemoteOpenState(environmentId);
   const canOperateHost = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
   const isHostEditorDenied = remote.mode === "local-exec" && !canOperateHost;
-  const canOpenEditor = remote.mode !== "remote-unavailable" && !isHostEditorDenied;
+  const canOpenEditor = !disabled && remote.mode !== "remote-unavailable" && !isHostEditorDenied;
   const [menuOpen, setMenuOpen] = useComposerMenuState(isHostEditorDenied);
   const remoteCapableEditors = useRemoteCapableEditors();
   const [remoteHintSeen, markRemoteHintSeen] = useRemoteOpenHint();
@@ -237,7 +242,13 @@ export const OpenInPicker = memo(function OpenInPicker({
   // Remote mode ignores the server's PATH probe: what matters is what runs on
   // the viewing machine, which only the desktop app can probe.
   const effectiveEditors = remote.mode === "local-exec" ? availableEditors : remoteCapableEditors;
-  const [preferredEditor, setPreferredEditor] = usePreferredEditor(effectiveEditors);
+  const [savedPreferredEditor, setPreferredEditor] = usePreferredEditor(effectiveEditors);
+  const preferredEditor =
+    fixedEditor === undefined
+      ? savedPreferredEditor
+      : effectiveEditors.includes(fixedEditor)
+        ? fixedEditor
+        : null;
   const options = useMemo(
     () => resolveOpenInOptions(navigator.platform, effectiveEditors),
     [effectiveEditors],
@@ -246,7 +257,7 @@ export const OpenInPicker = memo(function OpenInPicker({
 
   const openInEditor = useCallback(
     (editorId: EditorId | null) => {
-      if (!openInCwd) return;
+      if (!openInCwd || disabled) return;
       const editor = editorId ?? preferredEditor;
       if (!editor) return;
       if (remote.mode === "remote-unavailable") return;
@@ -262,7 +273,7 @@ export const OpenInPicker = memo(function OpenInPicker({
         void openRemoteEditorUrl(url).then((opened) => {
           if (!opened) return;
           markRemoteHintSeen();
-          setPreferredEditor(editor);
+          if (fixedEditor === undefined) setPreferredEditor(editor);
         });
         return;
       }
@@ -274,11 +285,13 @@ export const OpenInPicker = memo(function OpenInPicker({
           editor,
         },
       });
-      setPreferredEditor(editor);
+      if (fixedEditor === undefined) setPreferredEditor(editor);
       return result;
     },
     [
       environmentId,
+      fixedEditor,
+      disabled,
       markRemoteHintSeen,
       openInCwd,
       openInEditorMutation,
@@ -320,6 +333,21 @@ export const OpenInPicker = memo(function OpenInPicker({
     preferredEditor,
     remote.mode,
   ]);
+  if (fixedEditor !== undefined) {
+    const label = `Open in ${editorLabelForPlatform(fixedEditor, navigator.platform)}`;
+    return (
+      <Button
+        variant="outline"
+        size="xs"
+        aria-label={label}
+        disabled={!preferredEditor || !openInCwd || !canOpenEditor}
+        onClick={() => void openInEditor(preferredEditor)}
+      >
+        {primaryOption ? <primaryOption.Icon aria-hidden="true" /> : null}
+        {label}
+      </Button>
+    );
+  }
   const primaryLabel = isPanel ? `Open in ${primaryOption?.label ?? "editor"}` : "Open";
 
   const editorItems = (

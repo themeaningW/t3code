@@ -4,7 +4,6 @@ import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
 import { notebookCodeFence, parseNotebookPreview } from "@t3tools/shared/notebookPreview";
 
 import ChatMarkdown from "~/components/ChatMarkdown";
-import { Button } from "~/components/ui/button";
 import { ScrollArea } from "~/components/ui/scroll-area";
 
 import { FileSurfaceFailure, FileSurfaceNotice } from "./fileSurfaceChrome";
@@ -16,8 +15,6 @@ export function NotebookPreview(props: {
   readonly cwd?: string;
   readonly threadRef?: ScopedThreadRef;
   readonly workspaceMutationId?: string | null;
-  readonly onRunCell?: ((index: number) => void) | undefined;
-  readonly running?: boolean | undefined;
 }) {
   const lastSeparator = Math.max(props.name.lastIndexOf("/"), props.name.lastIndexOf("\\"));
   const imageBaseDir = props.cwd
@@ -34,9 +31,10 @@ export function NotebookPreview(props: {
   if ("error" in notebook) return <FileSurfaceFailure message={notebook.error} />;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {props.onRunCell ? null : (
-        <FileSurfaceNotice>Notebook preview. Cells are not executed.</FileSurfaceNotice>
-      )}
+      <FileSurfaceNotice>
+        Saved notebook preview. Edit and run cells in VS Code using the project's Python
+        environment.
+      </FileSurfaceNotice>
       {notebook.truncated ? (
         <FileSurfaceNotice>
           Preview limited to 200 cells. Switch to source for the rest.
@@ -55,17 +53,6 @@ export function NotebookPreview(props: {
                   : cell.kind === "markdown"
                     ? "Markdown"
                     : "Raw"}
-                {cell.kind === "code" && props.onRunCell ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={props.running}
-                    aria-label={`Run cell ${index + 1}`}
-                    onClick={() => props.onRunCell?.(index)}
-                  >
-                    Run
-                  </Button>
-                ) : null}
               </div>
               {cell.kind === "raw" ? (
                 <pre className="whitespace-pre-wrap break-words font-mono text-xs">

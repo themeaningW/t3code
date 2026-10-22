@@ -314,21 +314,15 @@ On web and desktop, open an `.ipynb` file from Files, a file link, or an attachm
 its cells and saved outputs. The preview supports Jupyter format 4, Markdown, code, text
 outputs, and PNG/JPEG plots. Interactive widgets are not displayed.
 
-For a writable workspace notebook, choose a Python kernel and use **Run** beside a code
-cell or **Run all**. Cells share variables in one kernel per notebook. **Stop** interrupts
-execution; if Python does not respond, T3 shuts down that kernel and reports that variables
-were cleared. **Restart** clears variables without deleting saved outputs. Run all stops at
-the first error. Kernels survive closing the panel, but not restarting T3.
+For a file on disk, choose **Open in VS Code** to edit and run its cells. In VS Code,
+select the project's Python environment as the notebook kernel, including its `.venv`
+when using uv. This action opens the saved file and leaves your preferred editor for
+other files unchanged. Remote environments need a supported SSH route.
 
-Outputs and execution counts are saved automatically. If the file changes during execution,
-T3 keeps those edits and reports that results were not saved. Agents can use
-`notebook_execute`, `notebook_status`, `notebook_interrupt`, and `notebook_restart` to access
-the same kernel. Execution requires terminal access; agent execution requires full access.
-
-The host needs a Python environment at `<T3 home>/tools/notebook-runtime` (or
-`~/.t3/tools/notebook-runtime`) with `jupyter-client` and `ipykernel`; add `matplotlib` for plots.
-Install project kernels separately to use their existing dependencies. Execution happens on
-the environment's host, including when the panel is opened remotely.
+Save the notebook in VS Code to share its code and outputs with agents in T3. The
+preview reloads when you return to T3; **Reload saved notebook** also refreshes it.
+Variables in VS Code's running kernel are not shared with T3. Opening a preview does
+not start a kernel or execute cells.
 
 Switch to source to inspect the JSON or edit a writable workspace file. Attachments and
 files outside the workspace remain read-only. Partially loaded notebooks cannot be rendered;

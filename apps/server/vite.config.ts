@@ -74,9 +74,9 @@ export default mergeConfig(
               ? {
                   code: JSON.stringify({ ...packageJson, version: localBuildVersion }),
                 }
-              : id.endsWith("notebook_worker.py?raw")
+              : id.replaceAll("\\", "/").endsWith("/notebookWorkerSource.ts")
                 ? {
-                    code: `export default ${JSON.stringify(await NodeFSP.readFile(id.slice(0, -4), "utf8"))}`,
+                    code: `export default ${JSON.stringify(await NodeFSP.readFile(new URL("./src/notebooks/notebook_worker.py", import.meta.url), "utf8"))}`,
                   }
                 : null,
         },

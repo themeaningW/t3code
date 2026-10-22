@@ -7,7 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
-import workerSource from "./notebook_worker.py?raw";
+import workerSource from "./notebookWorkerSource.ts";
 
 export interface KernelHandle {
   readonly request: (input: Readonly<Record<string, unknown>>) => Promise<unknown>;

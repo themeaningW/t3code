@@ -1730,6 +1730,13 @@ code {
   -webkit-app-region: drag;
 }
 
+/* Native drag hit testing ignores CSS stacking. While tabs own the titlebar,
+   only the dedicated handle may move the window; other headers must not leave
+   competing drag rectangles behind. */
+[data-thread-tabs="true"] .drag-region:not([data-window-drag-handle]) {
+  -webkit-app-region: no-drag;
+}
+
 /* Electron 44 inherits app-region. Reset children to the initial value so they
    do not add drag rectangles over fixed controls. Explicit `none` is treated
    as `no-drag` and breaks titlebar dragging; `initial` emits no rectangle.

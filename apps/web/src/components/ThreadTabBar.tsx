@@ -7,11 +7,25 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { useParams, useRouter } from "@tanstack/react-router";
-import { closestCenter, DndContext, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import {
+  closestCenter,
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
 import { horizontalListSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
-import { restrictToHorizontalAxis, restrictToFirstScrollableAncestor } from "@dnd-kit/modifiers";
+import { restrictToHorizontalAxis } from "@dnd-kit/modifiers";
 import { CSS } from "@dnd-kit/utilities";
-import { ListFilterIcon, MoreHorizontalIcon, PinIcon, PlusIcon, XIcon } from "lucide-react";
+import {
+  ListFilterIcon,
+  MoreHorizontalIcon,
+  MoveIcon,
+  PinIcon,
+  PlusIcon,
+  XIcon,
+} from "lucide-react";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { isThreadWorking } from "@t3tools/client-runtime/state/thread-inbox";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
@@ -76,7 +90,7 @@ function SortableThreadTab(props: {
       className={cn(
         "group/thread-tab relative flex w-48 shrink-0 items-center rounded-md border border-transparent pr-1 [-webkit-app-region:no-drag]",
         props.active ? "border-border bg-muted/60" : "hover:bg-muted/40",
-        isDragging && "z-10 bg-background",
+        isDragging && "opacity-40",
       )}
       onAuxClick={(event) => {
         if (event.button === 1) {
@@ -93,7 +107,7 @@ function SortableThreadTab(props: {
         aria-selected={props.active}
         aria-controls="thread-tab-active-view"
         tabIndex={props.focusable ? 0 : -1}
-        className="flex min-w-0 flex-1 items-center gap-1.5 rounded px-2 py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        className="flex min-w-0 flex-1 touch-none select-none cursor-grab items-center gap-1.5 rounded px-2 py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:cursor-grabbing"
         aria-label={`${presentation.title}, ${presentation.subtitle}, ${presentation.status}`}
         onClick={props.onSelect}
         onKeyDown={props.onKeyDown}
@@ -186,6 +200,7 @@ function EnabledThreadTabBar() {
     [query, setQuery] = useState(""),
     [environmentFilter, setEnvironmentFilter] = useState("all");
   const scroller = useRef<HTMLDivElement>(null);
+  const [draggedTabKey, setDraggedTabKey] = useState<string | null>(null);
   const closedRoute = useRef<string | null>(null);
   const focusSelectedTab = useRef(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -376,6 +391,7 @@ function EnabledThreadTabBar() {
       close(routeKey);
     }
   };
+  const draggedTab = state.tabs.find((tab) => tab.key === draggedTabKey);
   return (
     <>
       <WorkspacePageHeader
@@ -385,8 +401,11 @@ function EnabledThreadTabBar() {
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
-          modifiers={[restrictToHorizontalAxis, restrictToFirstScrollableAncestor]}
+          modifiers={[restrictToHorizontalAxis]}
+          onDragStart={({ active }) => setDraggedTabKey(String(active.id))}
+          onDragCancel={() => setDraggedTabKey(null)}
           onDragEnd={({ active, over }) => {
+            setDraggedTabKey(null);
             if (over) state.reorderTab(String(active.id), String(over.id));
           }}
         >
@@ -416,7 +435,30 @@ function EnabledThreadTabBar() {
               ))}
             </div>
           </SortableContext>
+          <DragOverlay dropAnimation={null}>
+            {draggedTab ? (
+              <div
+                aria-hidden
+                className="pointer-events-none w-48 rounded-md border border-border bg-background px-2 py-1 shadow-lg [-webkit-app-region:no-drag]"
+              >
+                <div className="truncate text-xs">{presentation(draggedTab).title}</div>
+                <div className="truncate text-3xs text-muted-foreground">
+                  {presentation(draggedTab).subtitle}
+                </div>
+              </div>
+            ) : null}
+          </DragOverlay>
         </DndContext>
+        {isElectron ? (
+          <div
+            data-window-drag-handle
+            role="img"
+            aria-label="Drag to move the window"
+            className="drag-region flex h-full w-8 shrink-0 items-center justify-center text-muted-foreground"
+          >
+            <MoveIcon aria-hidden className="size-3.5" />
+          </div>
+        ) : null}
         {/* Chat panel controls occupy the fixed titlebar area at the right. */}
         <div className="mr-36 flex shrink-0 items-center gap-1 [-webkit-app-region:no-drag]">
           <Button

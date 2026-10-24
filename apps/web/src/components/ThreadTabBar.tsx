@@ -417,7 +417,7 @@ function EnabledThreadTabBar() {
               ref={scroller}
               role="tablist"
               aria-label="Thread tabs"
-              className="flex min-w-0 flex-1 gap-1 overflow-x-auto [-webkit-app-region:no-drag] [scrollbar-width:none]"
+              className="flex min-w-0 shrink gap-1 overflow-x-auto [-webkit-app-region:no-drag] [scrollbar-width:none]"
             >
               {state.tabs.map((tab) => (
                 <SortableThreadTab

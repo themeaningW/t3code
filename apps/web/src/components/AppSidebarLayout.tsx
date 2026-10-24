@@ -346,7 +346,11 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
           <ThreadTabBar />
           <div
             id="thread-tab-active-view"
-            className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
+            className={cn(
+              "relative flex min-h-0 min-w-0 flex-1 overflow-hidden",
+              // Route roots normally fill the viewport; tabs already consume part of it.
+              threadTabsEnabled && "[&>main]:h-full!",
+            )}
           >
             {children}
           </div>

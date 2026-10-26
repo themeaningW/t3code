@@ -2,6 +2,7 @@ import { EnvironmentId } from "@t3tools/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { Atom, AsyncResult } from "effect/reactivity";
 import { appAtomRegistry } from "../rpc/atomRegistry";
+import { assignPreviewAnnotationId } from "./previewAnnotation";
 
 import {
   composerFileNeedsReattach,
@@ -375,6 +376,38 @@ describe("attachmentUploadQueue", () => {
       { environmentId: secondEnvironment, input: { attachmentId: "persisted-file" } },
       expect.anything(),
     );
+  });
+
+  it("uploads distinct screenshots when picker counters repeat after navigation", async () => {
+    const picked = {
+      id: "annotation_6",
+      pageUrl: "http://localhost:3000",
+      pageTitle: "Example",
+      comment: "Change this",
+      elements: [],
+      regions: [],
+      strokes: [],
+      styleChanges: [],
+      screenshot: null,
+      createdAt: "2026-10-26T00:00:00.000Z",
+    };
+    const images = [];
+    for (const bytes of ["first", "second screenshot"]) {
+      const annotation = assignPreviewAnnotationId(picked);
+      const file = new File([bytes], `preview-${annotation.id}.png`, { type: "image/png" });
+      const image = { ...makeImage(annotation.id), file, name: file.name, sizeBytes: file.size };
+      images.push(image);
+      startAttachmentUpload({ environmentId: firstEnvironment, image });
+      await Promise.resolve();
+      const request = TestXmlHttpRequest.requests.at(-1)!;
+      const settled = awaitAttachmentUploads([image.id]);
+      request.complete();
+      await settled;
+    }
+    expect(TestXmlHttpRequest.requests).toHaveLength(2);
+    const attachments = getUploadedAttachments({ environmentId: firstEnvironment, images });
+    expect(attachments?.map((attachment) => attachment.sizeBytes)).toEqual([5, 17]);
+    expect(new Set(attachments?.map((attachment) => attachment.id)).size).toBe(2);
   });
 
   it("uploads images immediately and sends attachment references", async () => {

@@ -28,7 +28,10 @@ import {
   useThreadRecentHistory,
 } from "~/browserHistoryStore";
 import { type ComposerImageAttachment, useComposerDraftStore } from "~/composerDraftStore";
-import { capturePreviewAnnotationScreenshot } from "~/lib/previewAnnotation";
+import {
+  assignPreviewAnnotationId,
+  capturePreviewAnnotationScreenshot,
+} from "~/lib/previewAnnotation";
 import { ensureLocalApi } from "~/localApi";
 import {
   rememberPreviewUrl,
@@ -805,7 +808,8 @@ export function PreviewView({
           if (isMountedRef.current) setPickActive(false);
           submitted = true;
         }
-        const { annotation: picked, submission, screenshotFailed = false } = result;
+        const { submission, screenshotFailed = false } = result;
+        const picked = assignPreviewAnnotationId(result.annotation);
         // The structured annotation is still sendable when its optional crop
         // stalls or fails, so tell the user what they lost and keep going
         // instead of holding the composer for an attachment that never lands.

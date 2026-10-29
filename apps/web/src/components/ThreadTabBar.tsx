@@ -107,9 +107,20 @@ function SortableThreadTab(props: {
         aria-selected={props.active}
         aria-controls="thread-tab-active-view"
         tabIndex={props.focusable ? 0 : -1}
-        className="flex min-w-0 flex-1 touch-none select-none cursor-grab items-center gap-1.5 rounded px-2 py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:cursor-grabbing"
+        className={cn(
+          "flex min-w-0 flex-1 touch-none select-none cursor-default items-center gap-1.5 rounded px-2 py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+          isDragging && "cursor-grabbing",
+        )}
         aria-label={`${presentation.title}, ${presentation.subtitle}, ${presentation.status}`}
-        onClick={props.onSelect}
+        onPointerDown={(event) => {
+          listeners?.onPointerDown?.(event);
+          // Switch on press; dragging still starts only after the movement threshold.
+          if (event.isPrimary && event.button === 0) props.onSelect();
+        }}
+        onClick={(event) => {
+          // Keyboard and assistive activation have no pointer-down event.
+          if (event.detail === 0) props.onSelect();
+        }}
         onKeyDown={props.onKeyDown}
       >
         {tab.pinned ? <PinIcon className="size-3 shrink-0 text-muted-foreground" /> : null}

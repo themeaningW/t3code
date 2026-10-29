@@ -9,6 +9,9 @@ declare module "micromark-util-types" {
     mathText: "mathText";
     mathTextSequence: "mathTextSequence";
     mathTextData: "mathTextData";
+    mathFlow: "mathFlow";
+    mathFlowFence: "mathFlowFence";
+    mathFlowValue: "mathFlowValue";
   }
 }
 
@@ -95,6 +98,106 @@ const backslashMath: Construct = {
   },
 };
 
+// Text constructs run after block parsing, when standalone '=' and blank lines
+// have already split the formula. Reserve display blocks at the flow stage.
+const backslashMathFlow: Construct = {
+  name: "latexMathFlow",
+  concrete: true,
+  tokenize(effects, ok, nok) {
+    const interrupt = this.interrupt;
+    const isLazy = () => this.parser.lazy[this.now().line];
+    const closing: Construct = {
+      partial: true,
+      tokenize(effects, ok, nok) {
+        return (code) => {
+          effects.enter("mathFlowFence");
+          effects.consume(code);
+          return (code) => {
+            if (code !== 93) return nok(code);
+            effects.consume(code);
+            return after;
+          };
+        };
+        function after(code: number | null): State | undefined {
+          if (code === 32 || code === -2 || code === -1) {
+            effects.consume(code);
+            return after;
+          }
+          if (code !== null && !markdownLineEnding(code)) return nok(code);
+          effects.exit("mathFlowFence");
+          return ok(code);
+        }
+      },
+    };
+    return (code) => {
+      effects.enter("mathFlow");
+      effects.enter("mathFlowFence");
+      effects.consume(code);
+      return (code) => {
+        if (code !== 91) return nok(code);
+        effects.consume(code);
+        effects.exit("mathFlowFence");
+        if (interrupt) return ok;
+        return between;
+      };
+    };
+
+    function between(code: number | null): State | undefined {
+      if (code === null) return nok(code);
+      if (code === 92) return effects.attempt(closing, finish, valueStart)(code);
+      if (markdownLineEnding(code)) {
+        effects.enter("lineEnding");
+        effects.consume(code);
+        effects.exit("lineEnding");
+        return lineStart;
+      }
+      return valueStart(code);
+    }
+
+    function lineStart(code: number | null): State | undefined {
+      if (isLazy()) return nok(code);
+      // Strip only indentation: container prefixes are handled by micromark.
+      if (code === 32 || code === -2 || code === -1) {
+        effects.enter("linePrefix");
+        effects.consume(code);
+        effects.exit("linePrefix");
+        return lineStart;
+      }
+      return between(code);
+    }
+
+    function valueStart(code: number | null): State | undefined {
+      effects.enter("mathFlowValue");
+      if (code === 92) {
+        effects.consume(code);
+        return escaped;
+      }
+      return value(code);
+    }
+
+    function value(code: number | null): State | undefined {
+      if (code === null || code === 92 || markdownLineEnding(code)) {
+        effects.exit("mathFlowValue");
+        return between(code);
+      }
+      effects.consume(code);
+      return value;
+    }
+
+    function escaped(code: number | null): State | undefined {
+      if (code === null || markdownLineEnding(code)) return value(code);
+      effects.consume(code);
+      effects.exit("mathFlowValue");
+      return between;
+    }
+
+    function finish(code: number | null) {
+      effects.exit("mathFlow");
+      return ok(code);
+    }
+  },
+};
+
 function withCurrencyGuard(construct: Construct): Construct {
   return {
     ...construct,
@@ -122,8 +225,8 @@ function withCurrencyGuard(construct: Construct): Construct {
 
 interface MathNode {
   type: string;
-  position?: { start: { offset?: number } };
-  data?: { hProperties?: Record<string, unknown> };
+  position?: { start: { offset?: number | undefined } } | undefined;
+  data?: { hProperties?: Record<string, unknown> } | undefined;
   children?: MathNode[];
 }
 
@@ -140,7 +243,10 @@ export function remarkChatMath(this: Processor) {
       ? dollar.map(withCurrencyGuard)
       : withCurrencyGuard(dollar);
   }
-  extensions.push({ text: { 92: backslashMath } } satisfies Extension);
+  extensions.push({
+    text: { 92: backslashMath },
+    flow: { 92: backslashMathFlow },
+  } satisfies Extension);
 
   return (tree: MathNode, file: { value: unknown }) => {
     const source = String(file.value);

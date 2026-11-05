@@ -34,7 +34,7 @@ const deepParent = (id: ThreadId): ThreadId | null => {
   return depth === 1 ? threadId : deepForkId(depth - 1);
 };
 
-const appItem = (output: unknown): OrchestrationV2TurnItem => ({
+const appItem = (output: unknown): Extract<OrchestrationV2TurnItem, { type: "dynamic_tool" }> => ({
   id: itemId,
   threadId,
   runId: null,
@@ -180,6 +180,62 @@ describe("McpAppRequests", () => {
       assert.equal(calls.length, before);
     }).pipe(Effect.provide(makeLayer({ item: appItem({ t3McpApp: app }), mcpApps }))),
   );
+
+  it.effect("resolves Codex app short names within the connector that created the app", () => {
+    const listed = [
+      { name: "tldraw._dotcom_sync_url", annotations: { readOnlyHint: true } },
+      { name: "other._dotcom_sync_url", annotations: { readOnlyHint: false } },
+      { name: "tldraw.model_only", _meta: { ui: { visibility: ["model"] } } },
+      { name: "other.missing" },
+    ];
+    const forwarded: Array<{ server: string; tool: string; arguments: unknown }> = [];
+    const multiplexed: ProviderAdapter.ProviderAdapterV2McpApps = {
+      ...mcpApps,
+      listTools: () => Effect.succeed(listed),
+      callTool: (input) =>
+        Effect.sync(() => {
+          forwarded.push({ server: input.server, tool: input.tool, arguments: input.arguments });
+          return { content: [{ type: "text", text: "connected" }] };
+        }),
+    };
+    return Effect.gen(function* () {
+      const requests = yield* McpAppRequests.McpAppRequests;
+      for (const name of ["_dotcom_sync_url", "tldraw._dotcom_sync_url"]) {
+        const info = yield* requests.toolInfo({ threadId, itemId, name });
+        assert.deepEqual(info, { callable: true, readOnly: true, tool: listed[0] });
+        const result = yield* requests.callTool({
+          threadId,
+          itemId,
+          name,
+          arguments: { boardId: "board-1" },
+        });
+        assert.deepEqual(result, { content: [{ type: "text", text: "connected" }] });
+        assert.deepEqual(forwarded.at(-1), {
+          server: "codex_apps",
+          tool: "tldraw._dotcom_sync_url",
+          arguments: { boardId: "board-1" },
+        });
+      }
+      for (const name of ["model_only", "missing", "absent"]) {
+        assert.equal((yield* requests.toolInfo({ threadId, itemId, name })).callable, false);
+        assert.equal(
+          yield* reason(requests.callTool({ threadId, itemId, name, arguments: {} })),
+          "tool-not-callable",
+        );
+      }
+      assert.equal(forwarded.length, 2);
+    }).pipe(
+      Effect.provide(
+        makeLayer({
+          item: {
+            ...appItem({ t3McpApp: { ...app, server: "codex_apps", tool: "tldraw.open_board" } }),
+            toolName: "codex_apps.tldraw.open_board",
+          },
+          mcpApps: multiplexed,
+        }),
+      ),
+    );
+  });
 
   it.effect("keeps each app's latest model context, without a live session", () =>
     Effect.gen(function* () {

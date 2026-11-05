@@ -116,7 +116,15 @@ const make = Effect.gen(function* () {
     const tools = yield* resolved.mcpApps
       .listTools({ providerThread: resolved.providerThread, server: resolved.app.server })
       .pipe(Effect.mapError((cause) => fail(threadId, "request-failed", cause)));
-    return tools.find((tool) => tool.name === name);
+    const exact = tools.find((tool) => tool.name === name);
+    if (exact !== undefined) return exact;
+    // Codex multiplexes connectors as `connector.tool`; their embedded apps
+    // still call the original short names. Resolve only within the source connector.
+    if (resolved.app.server !== "codex_apps" || name.includes(".")) return undefined;
+    const separator = resolved.app.tool.lastIndexOf(".");
+    if (separator <= 0) return undefined;
+    const qualified = `${resolved.app.tool.slice(0, separator)}.${name}`;
+    return tools.find((tool) => tool.name === qualified);
   });
 
   const toolInfo = Effect.fn("McpAppRequests.toolInfo")(function* (input: McpAppToolInfoInput) {
@@ -143,7 +151,7 @@ const make = Effect.gen(function* () {
       .callTool({
         providerThread: resolved.providerThread,
         server: resolved.app.server,
-        tool: input.name,
+        tool: tool.name,
         arguments: input.arguments,
       })
       .pipe(Effect.mapError((cause) => fail(input.threadId, "request-failed", cause)));

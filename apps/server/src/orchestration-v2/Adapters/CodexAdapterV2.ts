@@ -14,6 +14,7 @@ import {
 } from "../../provider/CodexTurnTokenUsage.ts";
 import type { ManagedServerProvider } from "@t3tools/provider-core/server/snapshot";
 import type { CodexEffectiveRuntime } from "../../provider/CodexManagedRuntime.ts";
+import { makeCodexBrowserAccessHost } from "../../provider/CodexBrowserAccessHost.ts";
 import {
   buildCodexInitializeParams,
   codexAppServerEnvironment,
@@ -1704,13 +1705,45 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                     }),
                 ),
               );
+        const activeTurns = yield* Ref.make(new Map<string, ActiveCodexTurnContext>());
+        // The browser plugin authorizes each turn against the host that owns this session.
+        const browserAccessEnvironment = yield* makeCodexBrowserAccessHost(
+          Effect.fn("CodexAdapterV2.authorizeBrowserAccess")(function* (request) {
+            const context = (yield* Ref.get(activeTurns)).get(request.turnId);
+            if (context === undefined) return false;
+            let root = context;
+            while (root.subagent !== null) root = root.subagent.parentContext;
+            // Native subagent requests can carry their root session's id.
+            if (
+              context.providerThread.nativeThreadRef?.nativeId !== request.sessionId &&
+              root.providerThread.nativeThreadRef?.nativeId !== request.sessionId
+            )
+              return false;
+            return (yield* readMcpSession(context.input.threadId))?.browserToolsAvailable === true;
+          }),
+        ).pipe(
+          Effect.catch((cause) =>
+            Effect.logWarning("Browser plugin access is unavailable for this session.", {
+              cause,
+            }).pipe(
+              Effect.as({
+                BROWSER_USE_ACCESS_EXECUTOR_ID: "",
+                BROWSER_USE_ACCESS_PIPE_PATH: "",
+                BROWSER_USE_ACCESS_VERIFYING_IDENTITY: "",
+              }),
+            ),
+          ),
+        );
         const client = yield* clientFactory.open({
           instanceId: adapterOptions.instanceId,
           threadId: input.threadId,
           providerSessionId: input.providerSessionId,
           runtimePolicy: input.runtimePolicy,
           settings: resolvedRuntime?.config ?? adapterOptions.settings,
-          environment: resolvedRuntime?.environment ?? adapterOptions.environment,
+          environment: {
+            ...(resolvedRuntime?.environment ?? adapterOptions.environment),
+            ...browserAccessEnvironment,
+          },
         });
         const additionalContextByThread = yield* Ref.make(
           new Map<
@@ -1796,7 +1829,6 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
         const limitedTurnItems = yield* Ref.make(
           new Map<ProviderThreadId, Extract<OrchestrationV2TurnItem, { type: "error" }>>(),
         );
-        const activeTurns = yield* Ref.make(new Map<string, ActiveCodexTurnContext>());
         const turnTokenUsageByThread = new Map<string, CodexTurnTokenUsageState>();
         const usageStateForThread = (nativeThreadId: string) => {
           let state = turnTokenUsageByThread.get(nativeThreadId);
